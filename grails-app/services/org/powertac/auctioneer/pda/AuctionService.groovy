@@ -80,10 +80,10 @@ class AuctionService implements Auctioneer {
   List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
 
     def shoutId = shoutDoUpdateCmd.shoutId
-    if (!shoutId) throw new ShoutUpdateException("Failed to update shout. No shout id found: ${shoutId}.")
+    if (!shoutId) throw new ShoutUpdateExeption("Failed to update shout. No shout id found: ${shoutId}.")
 
     def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) throw new ShoutUpdateException("Failed to update shout, No shout found for id: ${shoutId}")
+    if (!shoutInstance) throw new ShoutUpdateExeption("Failed to update shout, No shout found for id: ${shoutId}")
 
 
     def delShout = processShoutDelete(shoutInstance)
@@ -93,7 +93,7 @@ class AuctionService implements Auctioneer {
     updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice
     updatedShout.transactionId = IdGenerator.createId()
 
-    if (!updatedShout.save()) throw new ShoutUpdateException("Failed to save latet version of updated shout: ${updatedShout.errors}")
+    if (!updatedShout.save()) throw new ShoutUpdateExeption("Failed to save latet version of updated shout: ${updatedShout.errors}")
 
     return null
   }
