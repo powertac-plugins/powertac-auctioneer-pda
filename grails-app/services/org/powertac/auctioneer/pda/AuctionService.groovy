@@ -10,6 +10,7 @@ import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
 import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
+import org.powertac.common.exceptions.ShoutUpdateExeption
 
 class AuctionService implements Auctioneer {
 
@@ -55,13 +56,15 @@ class AuctionService implements Auctioneer {
   Shout processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
 
     def shoutId = shoutDoDeleteCmd.shoutId
-    if (!shoutId) throw new ShoutDeletionException("Failed to delete shout: No shout id found: ${shoutId}.")
+    if (!shoutId) throw new ShoutDeletionException("Failed to delete shout. No shout id found: ${shoutId}.")
 
     def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) throw new ShoutDeletionException("Failed to delete shout: No shout found for id: ${shoutId}")
+    if (!shoutInstance) throw new ShoutDeletionException("Failed to delete shout. No shout found for id: ${shoutId}")
 
-    shoutInstance.setLatest(false)
-    if (!shoutInstance.save()) throw new ShoutDeletionException("Failed to save outdated version of deleted shout: ${shoutInstance.errors}")
+    return processShoutDelete(shoutInstance)
+  }
+
+  private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
 
     def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
     delShout.transactionId = IdGenerator.createId()
@@ -70,8 +73,29 @@ class AuctionService implements Auctioneer {
     return delShout
   }
 
+  /* UPDATE SHOUT
+   *
+   */
+
   List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
-    return null  //To change body of implemented methods use File | Settings | File Templates.
+
+    def shoutId = shoutDoUpdateCmd.shoutId
+    if (!shoutId) throw new ShoutUpdateException("Failed to update shout. No shout id found: ${shoutId}.")
+
+    def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
+    if (!shoutInstance) throw new ShoutUpdateException("Failed to update shout, No shout found for id: ${shoutId}")
+
+
+    def delShout = processShoutDelete(shoutInstance)
+    Shout updatedShout = delShout.initModification(ModReasonCode.MODIFICATION)
+
+    updatedShout.quantity = shoutDoUpdateCmd.quantity
+    updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice
+    updatedShout.transactionId = IdGenerator.createId()
+
+    if (!updatedShout.save()) throw new ShoutUpdateException("Failed to save latet version of updated shout: ${updatedShout.errors}")
+
+    return null
   }
 
   List clearMarket() {
