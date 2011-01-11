@@ -1,0 +1,6 @@
+# Ignore following folders and files
+out/*
+target/*
+.idea/*
+powertac-auctioneer-pda-grailsPlugins.iml
+powertac-auctioneer-pda.iml
