@@ -11,8 +11,16 @@ import org.powertac.common.IdGenerator
 import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
 import org.powertac.common.exceptions.ShoutUpdateExeption
+import org.powertac.common.Product
+import org.powertac.common.enumerations.BuySellIndicator
 
 class AuctionService implements Auctioneer {
+
+
+  public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
+  public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
+
+
 
   /*
    * Implement Auctioneer interface methods
@@ -23,6 +31,7 @@ class AuctionService implements Auctioneer {
    * Populate additional properties
    * Save shout
    */
+
   List processShoutCreate(ShoutDoCreateCmd shoutDoCreate) {
 
     Shout shoutInstance = new Shout()
@@ -74,6 +83,8 @@ class AuctionService implements Auctioneer {
   }
 
   /* UPDATE SHOUT
+   * Validate shoutId, shoutInstance
+   * Delete old shout and create copy with modified quantity/limitPrice
    *
    */
 
@@ -89,8 +100,8 @@ class AuctionService implements Auctioneer {
     def delShout = processShoutDelete(shoutInstance)
     Shout updatedShout = delShout.initModification(ModReasonCode.MODIFICATION)
 
-    updatedShout.quantity = shoutDoUpdateCmd.quantity
-    updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice
+    updatedShout.quantity = shoutDoUpdateCmd.quantity ?: delShout.quantity
+    updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice ?: delShout.limitPrice
     updatedShout.transactionId = IdGenerator.createId()
 
     if (!updatedShout.save()) throw new ShoutUpdateExeption("Failed to save latet version of updated shout: ${updatedShout.errors}")
@@ -99,13 +110,65 @@ class AuctionService implements Auctioneer {
   }
 
   List clearMarket() {
-    return null  //To change body of implemented methods use File | Settings | File Templates.
+
+    /*
+     * ClearMarket for specific product
+     * Identify price in order to execute maximum quantity of shouts
+     * Specific or uniform price?
+     */
+    //Todo: Do for all products and all timeslots
+    def product
+    def timeslot
+
+    def candidates = Shout.withCriteria {
+      eq('product', product)
+      eq('timeslot', timeslot)
+      eq('latest', true)
+      order("limitPrice", "asc")
+    }
+    Map stat = calcUniformPrice(candidates)
+
+
+
+
+    return null
   }
 
 
+
+  private Map calcUniformPrice(List<Shout> shouts) {
+    Map stat = [:]
+    log.debug("Pricing shouts with uniform pricing...");
+
+    if (shouts?.size() < 1) {
+      stat.pricingStatus = "No Shouts found for uniform price calculation."
+      return stat
+    } else {
+      SortedSet turnovers = new TreeSet()
+      def prices = shouts.collect {it.limitPrice}.unique()
+      prices.each {price ->
+        def turnover = new Turnover()
+        def matchingBids = shouts.findAll {it.buySellIndicator == BuySellIndicator.BUY && it.limitPrice >= price}
+        def matchingAsks = shouts.findAll {it.buySellIndicator == BuySellIndicator.SELL && it.limitPrice <= price}
+        turnover.aggregatedQuantityBid = matchingBids?.size() > 0 ? matchingBids.sum {it.quantity} : 0.0
+        turnover.aggregatedQuantityAsk = matchingAsks?.size() > 0 ? matchingAsks.sum {it.quantity} : 0.0
+        turnover.price = price
+        turnovers << turnover
+      }
+      Turnover maxTurnover = turnovers?.first() //Turnover implement comparable interface and are sorted according to max executable volume and then min surplus
+      if (maxTurnover) {
+        stat.putAll(aggregatedQuantityAsk: maxTurnover.aggregatedQuantityAsk, aggregatedQuantityBid: maxTurnover.aggregatedQuantityBid, price: maxTurnover.price, executableVolume: maxTurnover.executableVolume, surplus: maxTurnover.surplus, pricingStatus: "Success")
+        return stat
+      } else {
+        stat?.pricingStatus = "No maximum turnover found during uniform price calculation"
+        return stat
+      }
+    }
+  }
+
   /*
-   * Implement CompetitionBaseEvents interface methods
-   */
+  * Implement CompetitionBaseEvents interface methods
+  */
 
   void competitionBeforeStart(Competition competition) {
     //To change body of implemented methods use File | Settings | File Templates.
