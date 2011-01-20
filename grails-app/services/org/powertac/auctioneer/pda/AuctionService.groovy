@@ -10,18 +10,16 @@ import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
 import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
-import org.powertac.common.exceptions.ShoutUpdateExeption
 import org.powertac.common.Product
 import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.TransactionLog
 import org.powertac.common.exceptions.MarketClearingException
-import javax.transaction.Transaction
 import org.powertac.common.enumerations.TransactionType
-import org.powertac.common.CashUpdate
 import org.powertac.common.command.CashDoUpdateCmd
 import org.powertac.common.command.PositionDoUpdateCmd
 import org.powertac.common.enumerations.OrderType
 import org.powertac.common.Timeslot
+import org.powertac.common.exceptions.ShoutUpdateException
 
 class AuctionService implements Auctioneer {
 
@@ -70,7 +68,7 @@ class AuctionService implements Auctioneer {
    * Update/save old version of inserted shout and save/return latest version of deleted shout
    * Todo: Broker and Competition validation?
    */
-  public Shout processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
+  public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
 
     def shoutId = shoutDoDeleteCmd.shoutId
     if (!shoutId) throw new ShoutDeletionException("Failed to delete shout. No shout id found: ${shoutId}.")
@@ -78,7 +76,8 @@ class AuctionService implements Auctioneer {
     def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
     if (!shoutInstance) throw new ShoutDeletionException("Failed to delete shout. No shout found for id: ${shoutId}")
 
-    return processShoutDelete(shoutInstance)
+    Shout delShout = processShoutDelete(shoutInstance)
+    return [delShout]
   }
 
   private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
@@ -98,10 +97,10 @@ class AuctionService implements Auctioneer {
   public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
 
     def shoutId = shoutDoUpdateCmd.shoutId
-    if (!shoutId) throw new ShoutUpdateExeption("Failed to update shout. No shout id found: ${shoutId}.")
+    if (!shoutId) throw new ShoutUpdateException("Failed to update shout. No shout id found: ${shoutId}.")
 
     def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) throw new ShoutUpdateExeption("Failed to update shout, No shout found for id: ${shoutId}")
+    if (!shoutInstance) throw new ShoutUpdateException("Failed to update shout, No shout found for id: ${shoutId}")
 
 
     def delShout = processShoutDelete(shoutInstance)
@@ -111,7 +110,7 @@ class AuctionService implements Auctioneer {
     updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice ?: delShout.limitPrice
     updatedShout.transactionId = IdGenerator.createId()
 
-    if (!updatedShout.save()) throw new ShoutUpdateExeption("Failed to save latet version of updated shout: ${updatedShout.errors}")
+    if (!updatedShout.save()) throw new ShoutUpdateException("Failed to save latet version of updated shout: ${updatedShout.errors}")
 
     return null
   }
