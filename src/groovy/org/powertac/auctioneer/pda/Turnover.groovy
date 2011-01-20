@@ -11,7 +11,7 @@ import org.apache.commons.lang.builder.HashCodeBuilder
  * are be default
  */
 
-class Turnover {
+class Turnover implements Comparable {
 
   BigDecimal price
   double aggregatedQuantityAsk
