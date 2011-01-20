@@ -1,0 +1,5 @@
+This plugin provides a  call-market auctioneer that clears the market upon a triggered clearing signal. 
+Prior to the signal, sell and buy orders are held by the auctioneer and can be deleted or updated.
+
+v0.1
+The current version supports limit orders but no market orders.
