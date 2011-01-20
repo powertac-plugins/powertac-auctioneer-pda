@@ -11,11 +11,12 @@ class PowertacAuctioneerPdaGrailsPlugin {
     ]
 
 
-    def author = "Daniel Schnurr"
-    def authorEmail = "daniel.schnurr@kit.edu"
+    def author = "Daniel Schnurr, Carsten Block"
+    def authorEmail = "daniel.schnurr@kit.edu, powertac@carstenblock.org"
     def title = "Call-Market Auctioneer"
     def description = '''\\
 This plugin provides a  call-market auctioneer that clears the market upon a triggered clearing signal. Prior to the signal, sell and buy orders are held by the auctioneer and can be deleted or updated.
+The current version supports limit orders but no market orders.
 '''
 
     // URL to the plugin's documentation
