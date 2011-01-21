@@ -17,6 +17,7 @@ import org.powertac.common.command.CashDoUpdateCmd
 import org.powertac.common.command.PositionDoUpdateCmd
 import org.powertac.common.TransactionLog
 import org.powertac.common.enumerations.TransactionType
+import javax.transaction.Transaction
 
 class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
@@ -253,6 +254,34 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(competition, posUpdate.competition)
     assertEquals(-sellShout.executionQuantity, posUpdate.relativeChange)
     assertEquals("org.powertac.auctioneer.pda", posUpdate.origin)
+  }
+
+
+  void testTradeLog() {
+    //init
+    Map stat = ['executableVolume': 100.0, 'price': 15.0, 'product': sampleProduct, 'competition': competition, 'timeslot': sampleTimeslot, 'transactionId': "123abc"]
+    TransactionLog returnedTl = auctionService.writeTradeLog(stat)
+
+    //validate
+    assertEquals(1, TransactionLog.list().size())
+    TransactionLog persistedTl = TransactionLog.list().first()
+    assert persistedTl.latest
+    assertEquals(TransactionType.TRADE, persistedTl.transactionType)
+    assertEquals(stat.price, persistedTl.price)
+    assertEquals(stat.executableVolume, persistedTl.quantity)
+    assertEquals(sampleProduct, persistedTl.product)
+    assertEquals(competition, persistedTl.competition)
+    assertEquals(stat.transactionId, persistedTl.transactionId)
+
+
+    assert returnedTl.latest
+    assertEquals(TransactionType.TRADE, returnedTl.transactionType)
+    assertEquals(stat.price, returnedTl.price)
+    assertEquals(stat.executableVolume, returnedTl.quantity)
+    assertEquals(sampleProduct, returnedTl.product)
+    assertEquals(competition, returnedTl.competition)
+    assertEquals(stat.transactionId, returnedTl.transactionId)
+
   }
 
   void testCompleteAllocationOfSingleBuyShout() {
@@ -563,6 +592,12 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, updatedBuy.executionQuantity)
     assertEquals(ModReasonCode.EXECUTION, updatedBuy.modReasonCode)
     assertEquals(sampleBuyer, updatedBuy.broker)
+
+    TransactionLog tradeLog = results.findAll {it instanceof TransactionLog && it.transactionType == TransactionType.TRADE}.first()
+    assertEquals(11.0, tradeLog.price)
+    assertEquals(10.0, tradeLog.quantity)
+    assertEquals(sampleProduct, tradeLog.product)
+    assertEquals(competition, tradeLog.competition)
 
   }
 

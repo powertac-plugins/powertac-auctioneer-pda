@@ -175,6 +175,8 @@ class AuctionService implements Auctioneer {
 
           stat.allocatedQuantityAsk = aggregQuantityAsk
           stat.allocatedQuantityBid = aggregQuantityBid
+
+          resultingList << writeTradeLog(stat)
         }
       }
     }
@@ -300,6 +302,46 @@ class AuctionService implements Auctioneer {
     }
 
     if (!tl.save()) throw new MarketClearingException("Failed to save Quote before clearing: ${tl.errors}")
+    return tl
+  }
+
+
+    /**
+   * Create and save updated Quote as a TransactionLog instance for the given *sorted* list of asks and bids.
+   * Previous Quote with latest=true of product and timeslot is set outdated and persisted.
+   *
+   * @param bids - sorted by descending limit price
+   * @param asks - sorted by ascending limit price
+   * @param stat - statistics data contain information about product, timeslot and transactionId
+   *
+   * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
+   */
+  private TransactionLog writeTradeLog(Map stat) throws MarketClearingException {
+
+    TransactionLog oldTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('product', stat.product)
+      eq('timeslot', stat.timeslot)
+      eq('transactionType', TransactionType.TRADE)
+      eq('latest', true)
+    }
+
+    if (oldTl) {
+      oldTl.latest = false
+      if (!oldTl.save()) throw new MarketClearingException("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
+    }
+
+    TransactionLog tl = new TransactionLog()
+    tl.transactionType = TransactionType.TRADE
+    tl.competition = stat.competition
+    tl.product = stat.product
+    tl.timeslot = stat.timeslot
+    tl.transactionId = stat.transactionId
+    tl.latest = true
+
+    tl.price = stat.price
+    tl.quantity = stat.executableVolume
+
+    if (!tl.save()) throw new MarketClearingException("Failed to save TransactionLog after clearing: ${tl.errors}")
     return tl
   }
 
