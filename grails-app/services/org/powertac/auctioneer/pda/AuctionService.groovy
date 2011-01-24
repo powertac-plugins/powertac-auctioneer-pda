@@ -38,6 +38,7 @@ class AuctionService implements Auctioneer {
    * Populate additional properties and save shout
    */
   List processShoutCreate(ShoutDoCreateCmd shoutDoCreate) {
+    List output = []
 
     if (shoutDoCreate.orderType == OrderType.MARKET) throw new ShoutCreationException("Market oder type is not supported in this version.")
 
@@ -60,7 +61,16 @@ class AuctionService implements Auctioneer {
 
     if (!shoutInstance.save()) throw new ShoutCreationException("Failed to create shout: ${shoutInstance.errors}")
 
-    return null
+
+    Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
+
+    if (updatedOrderbook) {
+      output << updatedOrderbook
+      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      if (updatedQuote) output << updatedQuote
+    }
+
+    return output
   }
 
   /**
@@ -136,12 +146,10 @@ class AuctionService implements Auctioneer {
         stat.product = product
         stat.competition = currentCompetition
         stat.timeslot = timeslot
-        stat.transactionId = IdGenerator.createId()
+        stat.transactionId = IdGenerator.createId() //Todo: Set transactionId properly
 
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
-
-        resultingList << writeQuote(bids, asks, stat)
 
         if (!stat.executableVolume || !stat.price) throw new MarketClearingException("Stats did not contain information on executable volume and / or price.")
 
@@ -176,6 +184,7 @@ class AuctionService implements Auctioneer {
 
           stat.allocatedQuantityAsk = aggregQuantityAsk
           stat.allocatedQuantityBid = aggregQuantityBid
+
 
           resultingList << writeTradeLog(stat)
         }
@@ -262,48 +271,59 @@ class AuctionService implements Auctioneer {
   }
 
   /**
-   * Create and save updated Quote as a TransactionLog instance for the given *sorted* list of asks and bids.
-   * Previous Quote with latest=true of product and timeslot is set outdated and persisted.
+   * Check if there is a new Quote (bestBid or bestAsk level has changed) based on incoming orderbook. If this
+   * is the case, create and save updated Quote as a TransactionLog instance. The previous Quote with latest=true
+   * of the specified product and timeslot is set outdated and persisted.
    *
-   * @param bids - sorted by descending limit price
-   * @param asks - sorted by ascending limit price
-   * @param stat - statistics data contain information about product, timeslot and transactionId
+   * @param orderbook - latest orderbook reporting a change in top 10levels of the book
    *
    * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
    */
-  private TransactionLog writeQuote(List bids, List asks, Map stat) throws MarketClearingException {
+  private TransactionLog updateQuote(Orderbook orderbook) {
+    TransactionLog newTransactionLog
+    Boolean latestTransactionLogExists = true
 
-    TransactionLog oldTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
-      eq('product', stat.product)
-      eq('timeslot', stat.timeslot)
+    TransactionLog latestTransactionLog = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('competition', orderbook.competition)
+      eq('product', orderbook.product)
+      eq('timeslot', orderbook.timeslot)
       eq('transactionType', TransactionType.QUOTE)
       eq('latest', true)
     }
 
-    if (oldTl) {
-      oldTl.latest = false
-      if (!oldTl.save()) throw new MarketClearingException("Failed to save outdated Quote before clearing: ${oldTl.errors}")
+    if (!latestTransactionLog) {
+      latestTransactionLog = new TransactionLog(bidSize: 0.0, askSize: 0.0)
+      latestTransactionLogExists = false
     }
 
-    TransactionLog tl = new TransactionLog()
-    tl.transactionType = TransactionType.QUOTE
-    tl.competition = stat.competition
-    tl.product = stat.product
-    tl.timeslot = stat.timeslot
-    tl.transactionId = stat.transactionId
-    tl.latest = true
+    if (latestTransactionLog.bid != orderbook.bid0
+            || latestTransactionLog.bidSize != orderbook.bidSize0
+            || latestTransactionLog.ask != orderbook.ask0
+            || latestTransactionLog.askSize != orderbook.askSize0) {
 
-    if (bids) {
-      tl.bid = bids[0].limitPrice
-      tl.bidSize = bids[0].quantity
-    }
-    if (asks) {
-      tl.ask = asks[0].limitPrice
-      tl.askSize = asks[0].quantity
+
+      if (latestTransactionLogExists) {
+        latestTransactionLog.latest = false
+        if (!latestTransactionLog.save()) throw new MarketClearingException("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
+      }
+
+      newTransactionLog = new TransactionLog()
+      newTransactionLog.transactionType = TransactionType.QUOTE
+      newTransactionLog.competition = orderbook.competition
+      newTransactionLog.product = orderbook.product
+      newTransactionLog.timeslot = orderbook.timeslot
+      newTransactionLog.transactionId = orderbook.transactionId
+      newTransactionLog.latest = true
+
+      newTransactionLog.bid = orderbook.bid0
+      newTransactionLog.bidSize = orderbook.bidSize0
+      newTransactionLog.ask = orderbook.ask0
+      newTransactionLog.askSize = orderbook.askSize0
+
+      if (!newTransactionLog.save()) throw new MarketClearingException("Failed to save new Quote TransactionLog: ${newTransactionLog.errors}")
     }
 
-    if (!tl.save()) throw new MarketClearingException("Failed to save Quote before clearing: ${tl.errors}")
-    return tl
+    return newTransactionLog
   }
 
   /**

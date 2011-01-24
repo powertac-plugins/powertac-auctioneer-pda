@@ -355,6 +355,27 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
+  void testSimpleUpdateOfFirstQuote() {
+    //init
+    Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0:  20, ask0: 13, askSize0: 10)
+
+    //action
+    TransactionLog tl = auctionService.updateQuote(orderbook)
+
+    //validate
+    assertNotNull(tl)
+    assertEquals(orderbook.bid0, tl.bid)
+    assertEquals(orderbook.bidSize0, tl.bidSize)
+    assertEquals(orderbook.ask0, tl.ask)
+    assertEquals(orderbook.askSize0, tl.askSize)
+    assertEquals(orderbook.competition, tl.competition)
+    assertEquals(orderbook.timeslot, tl.timeslot)
+    assertEquals(orderbook.product, tl.product)
+    assertEquals(orderbook.transactionId, tl.transactionId)
+    assert(tl.latest)
+
+  }
+
 
   void testCompleteAllocationOfSingleBuyShout() {
     //init
@@ -639,12 +660,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(competition, posUpdateSeller.competition)
     assertEquals(-10, posUpdateSeller.relativeChange)
     assertEquals("org.powertac.auctioneer.pda", posUpdateSeller.origin)
-
-    TransactionLog quoteLog = results.findAll {it instanceof TransactionLog && it.transactionType == TransactionType.QUOTE}.first()
-    assertEquals(11.0, quoteLog.ask)
-    assertEquals(11.0, quoteLog.bid)
-    assertEquals(20.0, quoteLog.askSize)
-    assertEquals(10.0, quoteLog.bidSize)
 
     assertEquals(2, results.findAll {it instanceof Shout}.size())
 
