@@ -18,6 +18,7 @@ import org.powertac.common.command.PositionDoUpdateCmd
 import org.powertac.common.TransactionLog
 import org.powertac.common.enumerations.TransactionType
 import javax.transaction.Transaction
+import org.powertac.common.Orderbook
 
 class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
@@ -256,7 +257,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals("org.powertac.auctioneer.pda", posUpdate.origin)
   }
 
-
   void testTradeLog() {
     //init
     Map stat = ['executableVolume': 100.0, 'price': 15.0, 'product': sampleProduct, 'competition': competition, 'timeslot': sampleTimeslot, 'transactionId': "123abc"]
@@ -273,7 +273,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(competition, persistedTl.competition)
     assertEquals(stat.transactionId, persistedTl.transactionId)
 
-
     assert returnedTl.latest
     assertEquals(TransactionType.TRADE, returnedTl.transactionType)
     assertEquals(stat.price, returnedTl.price)
@@ -281,8 +280,81 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(sampleProduct, returnedTl.product)
     assertEquals(competition, returnedTl.competition)
     assertEquals(stat.transactionId, returnedTl.transactionId)
-
   }
+
+  void testSimpleUpdateOfEmptyOrderbook() {
+    //init
+    buyShout.quantity = 50
+    buyShout.limitPrice = 11
+    buyShout.shoutId = "111"
+    buyShout.transactionId = "tbd"
+    buyShout.save()
+    auctionService.updateOrderbook(buyShout)
+
+    sellShout.quantity = 20
+    sellShout.limitPrice = 13
+    sellShout.shoutId = "112"
+    sellShout.transactionId = "tbd2"
+    sellShout.save()
+
+    //action
+    Orderbook ob = auctionService.updateOrderbook(sellShout)
+
+    //validate
+    assertEquals(buyShout.limitPrice, ob.bid0)
+    assertEquals(buyShout.quantity, ob.bidSize0)
+
+    assertEquals(sellShout.limitPrice, ob.ask0)
+    assertEquals(sellShout.quantity, ob.askSize0)
+
+    assertNull(ob.bid1)
+    assertEquals(0, ob.bidSize1)
+    assertNull(ob.ask1)
+    assertEquals(0, ob.askSize1)
+  }
+
+  /*
+   * Incoming shout (bid) adds quantity to existing price level
+   */
+
+  void testAggregationUpdateOfEmptyOrderbook() {
+    //init
+    buyShout.quantity = 50
+    buyShout.limitPrice = 11
+    buyShout.shoutId = "111"
+    buyShout.transactionId = "tbd"
+    buyShout.save()
+    auctionService.updateOrderbook(buyShout)
+
+    sellShout.quantity = 20
+    sellShout.limitPrice = 13
+    sellShout.shoutId = "112"
+    sellShout.transactionId = "tbd2"
+    sellShout.save()
+    auctionService.updateOrderbook(sellShout)
+
+    //action
+    buyShout2.quantity = 15
+    buyShout2.limitPrice = 11
+    buyShout2.shoutId = "113"
+    buyShout2.transactionId = "tbd3"
+    buyShout2.save()
+    Orderbook ob = auctionService.updateOrderbook(buyShout2)
+
+    //validate
+    assertEquals(buyShout2.limitPrice, ob.bid0)
+    assertEquals((buyShout.quantity + buyShout2.quantity), ob.bidSize0)
+
+    assertNull(ob.bid1)
+    assertEquals(0, ob.bidSize1)
+
+    assertEquals(sellShout.limitPrice, ob.ask0)
+    assertEquals(sellShout.quantity, ob.askSize0)
+
+    assertNull(ob.ask1)
+    assertEquals(0, ob.askSize1)
+  }
+
 
   void testCompleteAllocationOfSingleBuyShout() {
     //init
@@ -541,29 +613,28 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, s4.executionQuantity)
     assertEquals(11.0, s4.executionPrice)
 
-
     // Validate returned list
 
-    CashDoUpdateCmd cashUpdateBuyer = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange <0}.first()
+    CashDoUpdateCmd cashUpdateBuyer = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange < 0}.first()
     assertEquals(sampleBuyer, cashUpdateBuyer.broker)
     assertEquals(competition, cashUpdateBuyer.competition)
     assertEquals(-110, cashUpdateBuyer.relativeChange)
     assertEquals("org.powertac.auctioneer.pda", cashUpdateBuyer.origin)
 
-    PositionDoUpdateCmd posUpdateBuyer = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange >0}.first()
+    PositionDoUpdateCmd posUpdateBuyer = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange > 0}.first()
     assert (posUpdateBuyer instanceof PositionDoUpdateCmd)
     assertEquals(sampleBuyer, posUpdateBuyer.broker)
     assertEquals(competition, posUpdateBuyer.competition)
     assertEquals(10, posUpdateBuyer.relativeChange)
     assertEquals("org.powertac.auctioneer.pda", posUpdateBuyer.origin)
 
-    CashDoUpdateCmd cashUpdateSeller = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange >0}.first()
+    CashDoUpdateCmd cashUpdateSeller = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange > 0}.first()
     assertEquals(sampleSeller, cashUpdateSeller.broker)
     assertEquals(competition, cashUpdateSeller.competition)
     assertEquals(+110, cashUpdateSeller.relativeChange)
     assertEquals("org.powertac.auctioneer.pda", cashUpdateSeller.origin)
 
-    PositionDoUpdateCmd posUpdateSeller = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange <0}.first()
+    PositionDoUpdateCmd posUpdateSeller = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange < 0}.first()
     assertEquals(sampleSeller, posUpdateSeller.broker)
     assertEquals(competition, posUpdateSeller.competition)
     assertEquals(-10, posUpdateSeller.relativeChange)
@@ -575,7 +646,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(20.0, quoteLog.askSize)
     assertEquals(10.0, quoteLog.bidSize)
 
-    assertEquals(2, results.findAll{it instanceof Shout}.size())
+    assertEquals(2, results.findAll {it instanceof Shout}.size())
 
     Shout updatedSell = results.findAll {it instanceof Shout && it.buySellIndicator == BuySellIndicator.SELL}.first()
     assertEquals(11.0, updatedSell.limitPrice)
@@ -598,7 +669,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, tradeLog.quantity)
     assertEquals(sampleProduct, tradeLog.product)
     assertEquals(competition, tradeLog.competition)
-
   }
 
 

@@ -20,6 +20,7 @@ import org.powertac.common.command.PositionDoUpdateCmd
 import org.powertac.common.enumerations.OrderType
 import org.powertac.common.Timeslot
 import org.powertac.common.exceptions.ShoutUpdateException
+import org.powertac.common.Orderbook
 
 class AuctionService implements Auctioneer {
 
@@ -305,8 +306,7 @@ class AuctionService implements Auctioneer {
     return tl
   }
 
-
-    /**
+  /**
    * Create and save updated Quote as a TransactionLog instance for the given *sorted* list of asks and bids.
    * Previous Quote with latest=true of product and timeslot is set outdated and persisted.
    *
@@ -343,6 +343,135 @@ class AuctionService implements Auctioneer {
 
     if (!tl.save()) throw new MarketClearingException("Failed to save TransactionLog after clearing: ${tl.errors}")
     return tl
+  }
+
+  /*
+  * get top ten from db
+  * updateOrderbook
+  *
+  * if change in quote write TransactionLog
+  */
+
+  private Orderbook updateOrderbook(Shout shout) {
+
+    Boolean firstOrderbook
+
+    Orderbook latestOrderbook = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+      eq('latest', true)
+    }
+
+    if (!latestOrderbook) {
+      latestOrderbook = new Orderbook()  //create new orderbook
+      firstOrderbook = true
+    }
+
+    def bestAsks = Shout.withCriteria() {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+      eq('buySellIndicator', BuySellIndicator.SELL)
+      eq('latest', true)
+      maxResults(10)
+      order('limitPrice', 'asc')
+
+      projections {
+        groupProperty('limitPrice')
+        sum('quantity')
+      }
+    }
+
+    def bestBids = Shout.withCriteria() {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+      eq('buySellIndicator', BuySellIndicator.BUY)
+      eq('latest', true)
+      maxResults(10)
+      order('limitPrice', 'desc')
+
+      projections {
+        groupProperty('limitPrice')
+        sum('quantity')
+      }
+    }
+
+    BigDecimal[][][] newOrderbookArray = new BigDecimal[2][2][10]
+    BigDecimal[][][] latestOrderbookArray = latestOrderbook.getOrderbookArray()
+    Boolean orderbookChangeFound = false
+    Integer levelCounter = 0
+
+    if (bestBids.size() == 0) { //no open bid orders left
+      if (latestOrderbook.bid1 != null) {
+        orderbookChangeFound = true //empty bid orderbook is new situation if latestOrderbook contained bid
+      }
+    }
+    else {
+      //BID: check if new orderbook entry && create newOrderbookArray
+      levelCounter = 0
+      while (levelCounter <= 9) {
+        //create newOrderbookArray bid entry
+        if (bestBids[levelCounter]) {
+          newOrderbookArray[0][0][levelCounter] = bestBids[levelCounter][0] //price
+          newOrderbookArray[0][1][levelCounter] = bestBids[levelCounter][1] //size
+        } else {
+          //fill empty levels (in case of deletion this is necessary)
+          newOrderbookArray[0][0][levelCounter] = null
+          newOrderbookArray[0][1][levelCounter] = 0.0
+        }
+
+        //changed?
+        if (!orderbookChangeFound && !(latestOrderbookArray[0][0][levelCounter] == newOrderbookArray[0][0][levelCounter] && latestOrderbookArray[0][1][levelCounter] == newOrderbookArray[0][1][levelCounter])) {
+          orderbookChangeFound = true
+        }
+        levelCounter++
+      }
+    }
+
+    //no open ask orders left
+    if (bestAsks.size() == 0) {
+      //empty ask orderbook is new situation
+      if (latestOrderbook.getAsk1() != null) {
+        orderbookChangeFound = true
+      }
+    }
+    else {
+      //ASK: check if new orderbook entry && create newOrderbookArray
+      levelCounter = 0
+
+      while (levelCounter <= 9) {
+        //create newOrderbookArray bid entry
+        if (bestAsks[levelCounter]) {
+          newOrderbookArray[1][0][levelCounter] = bestAsks[levelCounter][0] //price
+          newOrderbookArray[1][1][levelCounter] = bestAsks[levelCounter][1] //size
+        } else {
+          //fill empty levels (in case of deletion this is necessary)
+          newOrderbookArray[1][0][levelCounter] = null
+          newOrderbookArray[1][1][levelCounter] = 0.0
+        }
+
+        //changed?
+        if (!orderbookChangeFound && !(latestOrderbookArray[1][0][levelCounter] == newOrderbookArray[1][0][levelCounter] && latestOrderbookArray[1][1][levelCounter] == newOrderbookArray[1][1][levelCounter])) {
+          orderbookChangeFound = true
+        }
+        levelCounter++
+
+      }
+    }
+
+    //If there are changes found create new orderbook entry
+    if (orderbookChangeFound) {
+      if (!firstOrderbook) {
+        latestOrderbook.latest = false
+        if (!latestOrderbook.save()) throw new MarketClearingException("Failed to save outdated Orderbook:${latestOrderbook.errors}")
+      }
+
+      def newOrderbook = new Orderbook(competition: shout.competition, product: shout.product, timeslot: shout.timeslot, transactionId: shout.transactionId, dateExecuted: shout.dateMod, latest: true)
+      newOrderbook.setOrderbookArray(newOrderbookArray)
+      if (!newOrderbook.save()) throw new MarketClearingException("Failed to save updated Orderbook: ${newOrderbook.errors}")
+
+      return newOrderbook
+    }
+    return null
   }
 
   /**
