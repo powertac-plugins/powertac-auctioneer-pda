@@ -63,7 +63,6 @@ class AuctionService implements Auctioneer {
 
 
     Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
-
     if (updatedOrderbook) {
       output << updatedOrderbook
       TransactionLog updatedQuote = updateQuote(updatedOrderbook)
@@ -80,7 +79,7 @@ class AuctionService implements Auctioneer {
    * Todo: Broker and Competition validation?
    */
   public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
-
+    List output = []
     def shoutId = shoutDoDeleteCmd.shoutId
     if (!shoutId) throw new ShoutDeletionException("Failed to delete shout. No shout id found: ${shoutId}.")
 
@@ -88,13 +87,23 @@ class AuctionService implements Auctioneer {
     if (!shoutInstance) throw new ShoutDeletionException("Failed to delete shout. No shout found for id: ${shoutId}")
 
     Shout delShout = processShoutDelete(shoutInstance)
-    return [delShout]
+    output << delShout
+
+    Orderbook updatedOrderbook = updateOrderbook(delShout)
+    if (updatedOrderbook) {
+      output << updatedOrderbook
+      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      if (updatedQuote) output << updatedQuote
+    }
+
+    return output
   }
 
   private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
 
     def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
     delShout.transactionId = IdGenerator.createId()
+    delShout.latest = false
     if (!delShout.save()) throw new ShoutDeletionException("Failed to save latest version of deleted shout: ${shoutInstance.errors}")
 
     return delShout
@@ -315,10 +324,10 @@ class AuctionService implements Auctioneer {
       newTransactionLog.transactionId = orderbook.transactionId
       newTransactionLog.latest = true
 
-      newTransactionLog.bid = orderbook.bid0
-      newTransactionLog.bidSize = orderbook.bidSize0
-      newTransactionLog.ask = orderbook.ask0
-      newTransactionLog.askSize = orderbook.askSize0
+      newTransactionLog.bid = (orderbook.bid0 ?: null)
+      newTransactionLog.bidSize = (orderbook.bidSize0 ?: null)
+      newTransactionLog.ask = (orderbook.ask0 ?: null)
+      newTransactionLog.askSize = (orderbook.askSize0 ?: null)
 
       if (!newTransactionLog.save()) throw new MarketClearingException("Failed to save new Quote TransactionLog: ${newTransactionLog.errors}")
     }
@@ -421,7 +430,7 @@ class AuctionService implements Auctioneer {
     Integer levelCounter = 0
 
     if (bestBids.size() == 0) { //no open bid orders left
-      if (latestOrderbook.bid1 != null) {
+      if (latestOrderbook.bid0 != null) {
         orderbookChangeFound = true //empty bid orderbook is new situation if latestOrderbook contained bid
       }
     }
@@ -450,7 +459,7 @@ class AuctionService implements Auctioneer {
     //no open ask orders left
     if (bestAsks.size() == 0) {
       //empty ask orderbook is new situation
-      if (latestOrderbook.getAsk1() != null) {
+      if (latestOrderbook.ask0 != null) {
         orderbookChangeFound = true
       }
     }
