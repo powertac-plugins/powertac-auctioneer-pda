@@ -148,6 +148,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Shout oldS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
       eq('limitPrice', 10.0)
       eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.INSERT)
       eq('latest', false)
     }
     assertNotNull oldS1
@@ -156,7 +157,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Shout delS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
       eq('limitPrice', 10.0)
       eq('quantity', 10.0)
-      eq('latest', true)
+      eq('modReasonCode', ModReasonCode.DELETIONBYUSER)
+      eq('latest', false)
     }
     assertNotNull delS1
     assertEquals(s1.shoutId, delS1.shoutId)
@@ -355,9 +357,49 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
-  void testSimpleUpdateOfFirstQuote() {
+  void testSimpleUpdateOfFirstQuoteWithBidOnly() {
     //init
-    Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0:  20, ask0: 13, askSize0: 10)
+    Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20)
+
+    //action
+    TransactionLog tl = auctionService.updateQuote(orderbook)
+
+    //validate
+    assertNotNull(tl)
+    assertEquals(orderbook.bid0, tl.bid)
+    assertEquals(orderbook.bidSize0, tl.bidSize)
+    assertNull(tl.ask)
+    assertNull(tl.askSize)
+    assertEquals(orderbook.competition, tl.competition)
+    assertEquals(orderbook.timeslot, tl.timeslot)
+    assertEquals(orderbook.product, tl.product)
+    assertEquals(orderbook.transactionId, tl.transactionId)
+    assert (tl.latest)
+  }
+
+  void testSimpleUpdateOfFirstQuoteWithAskOnly() {
+    //init
+    Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, ask0: 10.0, askSize0: 20)
+
+    //action
+    TransactionLog tl = auctionService.updateQuote(orderbook)
+
+    //validate
+    assertNotNull(tl)
+    assertEquals(orderbook.ask0, tl.ask)
+    assertEquals(orderbook.askSize0, tl.askSize)
+    assertNull(tl.bid)
+    assertNull(tl.bidSize)
+    assertEquals(orderbook.competition, tl.competition)
+    assertEquals(orderbook.timeslot, tl.timeslot)
+    assertEquals(orderbook.product, tl.product)
+    assertEquals(orderbook.transactionId, tl.transactionId)
+    assert (tl.latest)
+  }
+
+  void testSimpleUpdateOfFirstQuoteWithBidAndAsk() {
+    //init
+    Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20, ask0: 13, askSize0: 10)
 
     //action
     TransactionLog tl = auctionService.updateQuote(orderbook)
@@ -372,8 +414,114 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(orderbook.timeslot, tl.timeslot)
     assertEquals(orderbook.product, tl.product)
     assertEquals(orderbook.transactionId, tl.transactionId)
-    assert(tl.latest)
+    assert (tl.latest)
+  }
 
+  void testUpdateQuoteAfterIncomingShoutDoCreateCommandSequence() {
+    //init + action
+    sell1.limitPrice = 13.0
+    sell1.quantity = 10.0
+    TransactionLog firstTl = auctionService.processShoutCreate(sell1).findAll {it instanceof TransactionLog}.first()
+
+    buy1.limitPrice = 10.0
+    buy1.quantity = 10.0
+    TransactionLog secondTl = auctionService.processShoutCreate(buy1).findAll {it instanceof TransactionLog}.first()
+
+    sell1.limitPrice = 12.0
+    sell1.quantity = 20
+    TransactionLog thirdTl = auctionService.processShoutCreate(sell1).findAll {it instanceof TransactionLog}.first()
+
+    buy1.limitPrice = 10.0
+    buy1.quantity = 30.0
+    TransactionLog fourthTl = auctionService.processShoutCreate(buy1).findAll {it instanceof TransactionLog}.first()
+
+    //validate
+    assertNotNull(firstTl)
+    assertEquals(13.0, firstTl.ask)
+    assertEquals(10.0, firstTl.askSize)
+    assertNull(firstTl.bid)
+    assertNull(firstTl.bidSize)
+
+    assertNotNull(secondTl)
+    assertEquals(13.0, secondTl.ask)
+    assertEquals(10.0, secondTl.askSize)
+    assertEquals(10.0, secondTl.bid)
+    assertEquals(10.0, secondTl.bidSize)
+
+    assertNotNull(thirdTl)
+    assertEquals(12.0, thirdTl.ask)
+    assertEquals(20.0, thirdTl.askSize)
+    assertEquals(10.0, thirdTl.bid)
+    assertEquals(10.0, thirdTl.bidSize)
+
+    assertNotNull(fourthTl)
+    assertEquals(12.0, fourthTl.ask)
+    assertEquals(20.0, fourthTl.askSize)
+    assertEquals(10.0, fourthTl.bid)
+    assertEquals(40.0, fourthTl.bidSize)
+
+    TransactionLog firstPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 13.0)
+      eq('askSize', 10.0)
+      isNull('bid')
+      isNull('bidSize')
+    }
+
+    assertNotNull(firstPersistedTl)
+    assertFalse(firstPersistedTl.latest)
+
+    TransactionLog secondPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 13.0)
+      eq('askSize', 10.0)
+      eq('bid', 10.0)
+      eq('bidSize', 10.0)
+    }
+
+    assertNotNull(secondPersistedTl)
+    assertFalse(secondPersistedTl.latest)
+
+    TransactionLog thirdPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 12.0)
+      eq('askSize', 20.0)
+      eq('bid', 10.0)
+      eq('bidSize', 10.0)
+    }
+
+    assertNotNull(thirdPersistedTl)
+    assertFalse(thirdPersistedTl.latest)
+
+    TransactionLog fourthPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 12.0)
+      eq('askSize', 20.0)
+      eq('bid', 10.0)
+      eq('bidSize', 40.0)
+    }
+
+    assertNotNull(fourthPersistedTl)
+    assert(fourthPersistedTl.latest)
+  }
+
+  void testQuoteUpdateAfterShoutDeletion() {
+    //init
+    sell1.limitPrice = 15.0
+    sell1.quantity = 10.0
+    auctionService.processShoutCreate(sell1)
+
+    def shoutId = Shout.findByLatest(true).shoutId
+    ShoutDoDeleteCmd myShoutDoDeleteCmd = new ShoutDoDeleteCmd(competition: competition, broker: sampleSeller, shoutId: shoutId)
+
+    //action
+    List output = auctionService.processShoutDelete(myShoutDoDeleteCmd)
+    assertNotNull(output)
+    TransactionLog tlAfterDelete = output.findAll {it instanceof TransactionLog}.first()
+
+    //validate
+    assertNotNull(tlAfterDelete)
+    assertNull(tlAfterDelete.bid)
+    assertNull(tlAfterDelete.bidSize)
+    assertNull(tlAfterDelete.ask)
+    assertNull(tlAfterDelete.askSize)
+    assert(tlAfterDelete.latest)
   }
 
 
