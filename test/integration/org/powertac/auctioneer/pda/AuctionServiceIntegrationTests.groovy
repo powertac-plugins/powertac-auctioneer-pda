@@ -498,10 +498,10 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     }
 
     assertNotNull(fourthPersistedTl)
-    assert(fourthPersistedTl.latest)
+    assert (fourthPersistedTl.latest)
   }
 
-  void testQuoteUpdateAfterShoutDeletion() {
+  void testQuoteAndOrderbookUpdateAfterShoutDeletion() {
     //init
     sell1.limitPrice = 15.0
     sell1.quantity = 10.0
@@ -514,6 +514,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     List output = auctionService.processShoutDelete(myShoutDoDeleteCmd)
     assertNotNull(output)
     TransactionLog tlAfterDelete = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook obAfterDelete = output.findAll {it instanceof Orderbook}.first()
 
     //validate
     assertNotNull(tlAfterDelete)
@@ -521,7 +522,245 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(tlAfterDelete.bidSize)
     assertNull(tlAfterDelete.ask)
     assertNull(tlAfterDelete.askSize)
-    assert(tlAfterDelete.latest)
+    assert (tlAfterDelete.latest)
+
+    assertNotNull(obAfterDelete)
+    assertNull(obAfterDelete.bid0)
+    assertEquals(0.0, obAfterDelete.bidSize0)
+    assertNull(obAfterDelete.ask0)
+    assertEquals(0.0, obAfterDelete.askSize0)
+    assert (obAfterDelete.latest)
+
+    TransactionLog tlBeforeDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 15.0)
+      eq('askSize', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(tlBeforeDelete)
+
+    Orderbook obBeforeDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 15.0)
+      eq('askSize0', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(obBeforeDelete)
+  }
+
+  void testQuoteAndOrderbookUpdateAfterShoutQuantityUpdate() {
+
+    //init
+    sell1.limitPrice = 15.0
+    sell1.quantity = 10.0
+    auctionService.processShoutCreate(sell1)
+
+    def shoutId = Shout.findByLatest(true).shoutId
+    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(competition: competition, broker: sampleSeller, shoutId: shoutId)
+    shoutUpdate.quantity = 20.0
+
+    //action
+    List output = auctionService.processShoutUpdate(shoutUpdate)
+
+    //validate
+
+    assertNotNull(output)
+    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
+
+    assertNotNull(tlAfterUpdate)
+    assertNull(tlAfterUpdate.bid)
+    assertNull(tlAfterUpdate.bidSize)
+    assertEquals(15.0, tlAfterUpdate.ask)
+    assertEquals(20.0, tlAfterUpdate.askSize)
+    assert (tlAfterUpdate.latest)
+
+    assertNotNull(obAfterUpdate)
+    assertNull(obAfterUpdate.bid0)
+    assertEquals(0.0, obAfterUpdate.bidSize0)
+    assertEquals(15.0, obAfterUpdate.ask0)
+    assertEquals(20.0, obAfterUpdate.askSize0)
+    assert (obAfterUpdate.latest)
+
+    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 15.0)
+      eq('askSize', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedTlBeforeUpdate)
+    assertNull(persistedTlBeforeUpdate.bid)
+    assertNull(persistedTlBeforeUpdate.bidSize)
+
+    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 15.0)
+      eq('askSize0', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedObBeforeUpdate)
+    assertNull(persistedObBeforeUpdate.bid0)
+    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
+
+    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 15.0)
+      eq('askSize', 20.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedTlAfterUpdate)
+    assertNull(persistedTlAfterUpdate.bid)
+    assertNull(persistedTlAfterUpdate.bidSize)
+
+    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 15.0)
+      eq('askSize0', 20.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedObAfterUpdate)
+    assertNull(persistedObAfterUpdate.bid0)
+    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
+
+  }
+
+  void testQuoteAndOrderbookUpdateAfterShoutLimitPriceUpdate() {
+
+    //init
+    sell1.limitPrice = 15.0
+    sell1.quantity = 10.0
+    auctionService.processShoutCreate(sell1)
+
+    def shoutId = Shout.findByLatest(true).shoutId
+    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(competition: competition, broker: sampleSeller, shoutId: shoutId)
+    shoutUpdate.limitPrice = 10.0
+
+    //action
+    List output = auctionService.processShoutUpdate(shoutUpdate)
+
+    //validate
+
+    assertNotNull(output)
+    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
+
+    assertNotNull(tlAfterUpdate)
+    assertNull(tlAfterUpdate.bid)
+    assertNull(tlAfterUpdate.bidSize)
+    assertEquals(10.0, tlAfterUpdate.ask)
+    assertEquals(10.0, tlAfterUpdate.askSize)
+    assert (tlAfterUpdate.latest)
+
+    assertNotNull(obAfterUpdate)
+    assertNull(obAfterUpdate.bid0)
+    assertEquals(0.0, obAfterUpdate.bidSize0)
+    assertEquals(10.0, obAfterUpdate.ask0)
+    assertEquals(10.0, obAfterUpdate.askSize0)
+    assert (obAfterUpdate.latest)
+
+    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 15.0)
+      eq('askSize', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedTlBeforeUpdate)
+    assertNull(persistedTlBeforeUpdate.bid)
+    assertNull(persistedTlBeforeUpdate.bidSize)
+
+    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 15.0)
+      eq('askSize0', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedObBeforeUpdate)
+    assertNull(persistedObBeforeUpdate.bid0)
+    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
+
+    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 10.0)
+      eq('askSize', 10.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedTlAfterUpdate)
+    assertNull(persistedTlAfterUpdate.bid)
+    assertNull(persistedTlAfterUpdate.bidSize)
+
+    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 10.0)
+      eq('askSize0', 10.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedObAfterUpdate)
+    assertNull(persistedObAfterUpdate.bid0)
+    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
+
+  }
+
+  void testQuoteAndOrderbookUpdateAfterShoutQuantityAndLimitPriceUpdate() {
+
+    //init
+    sell1.limitPrice = 15.0
+    sell1.quantity = 10.0
+    auctionService.processShoutCreate(sell1)
+
+    def shoutId = Shout.findByLatest(true).shoutId
+    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(competition: competition, broker: sampleSeller, shoutId: shoutId)
+    shoutUpdate.limitPrice = 10.0
+    shoutUpdate.quantity = 20.0
+
+    //action
+    List output = auctionService.processShoutUpdate(shoutUpdate)
+
+    //validate
+
+    assertNotNull(output)
+    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
+
+    assertNotNull(tlAfterUpdate)
+    assertNull(tlAfterUpdate.bid)
+    assertNull(tlAfterUpdate.bidSize)
+    assertEquals(10.0, tlAfterUpdate.ask)
+    assertEquals(20.0, tlAfterUpdate.askSize)
+    assert (tlAfterUpdate.latest)
+
+    assertNotNull(obAfterUpdate)
+    assertNull(obAfterUpdate.bid0)
+    assertEquals(0.0, obAfterUpdate.bidSize0)
+    assertEquals(10.0, obAfterUpdate.ask0)
+    assertEquals(20.0, obAfterUpdate.askSize0)
+    assert (obAfterUpdate.latest)
+
+    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 15.0)
+      eq('askSize', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedTlBeforeUpdate)
+    assertNull(persistedTlBeforeUpdate.bid)
+    assertNull(persistedTlBeforeUpdate.bidSize)
+
+    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 15.0)
+      eq('askSize0', 10.0)
+      eq('latest', false)
+    }
+    assertNotNull(persistedObBeforeUpdate)
+    assertNull(persistedObBeforeUpdate.bid0)
+    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
+
+    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      eq('ask', 10.0)
+      eq('askSize', 20.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedTlAfterUpdate)
+    assertNull(persistedTlAfterUpdate.bid)
+    assertNull(persistedTlAfterUpdate.bidSize)
+
+    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 10.0)
+      eq('askSize0', 20.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedObAfterUpdate)
+    assertNull(persistedObAfterUpdate.bid0)
+    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
+
   }
 
 

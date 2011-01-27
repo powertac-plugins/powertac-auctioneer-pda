@@ -115,7 +115,7 @@ class AuctionService implements Auctioneer {
    * Delete old shout and create copy with modified quantity/limitPrice
    */
   public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
-
+    List output = []
     def shoutId = shoutDoUpdateCmd.shoutId
     if (!shoutId) throw new ShoutUpdateException("Failed to update shout. No shout id found: ${shoutId}.")
 
@@ -132,7 +132,14 @@ class AuctionService implements Auctioneer {
 
     if (!updatedShout.save()) throw new ShoutUpdateException("Failed to save latet version of updated shout: ${updatedShout.errors}")
 
-    return null
+    Orderbook updatedOrderbook = updateOrderbook(updatedShout)
+    if (updatedOrderbook) {
+      output << updatedOrderbook
+      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      if (updatedQuote) output << updatedQuote
+    }
+
+    return output
   }
 
   public List clearMarket() {
