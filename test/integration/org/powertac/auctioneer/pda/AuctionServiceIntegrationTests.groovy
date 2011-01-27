@@ -357,7 +357,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
-  void testSimpleUpdateOfFirstQuoteWithBidOnly() {
+  void testInitialQuoteUpdateWithBidOnly() {
     //init
     Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20)
 
@@ -377,7 +377,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assert (tl.latest)
   }
 
-  void testSimpleUpdateOfFirstQuoteWithAskOnly() {
+  void testInitialQuoteUpdateWithAskOnly() {
     //init
     Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, ask0: 10.0, askSize0: 20)
 
@@ -397,7 +397,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assert (tl.latest)
   }
 
-  void testSimpleUpdateOfFirstQuoteWithBidAndAsk() {
+  void testInitialQuoteUpdateWithBidAndAsk() {
     //init
     Orderbook orderbook = new Orderbook(competition: competition, product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20, ask0: 13, askSize0: 10)
 
@@ -417,23 +417,35 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assert (tl.latest)
   }
 
-  void testUpdateQuoteAfterIncomingShoutDoCreateCommandSequence() {
+  void testQuoteAndOrderbookUpdateAfterIncomingShoutDoCreateCommandSequence() {
     //init + action
     sell1.limitPrice = 13.0
     sell1.quantity = 10.0
-    TransactionLog firstTl = auctionService.processShoutCreate(sell1).findAll {it instanceof TransactionLog}.first()
+    List output = auctionService.processShoutCreate(sell1)
+    assertNotNull(output)
+    TransactionLog firstTl = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook firstOb = output.findAll {it instanceof Orderbook}.first()
 
     buy1.limitPrice = 10.0
     buy1.quantity = 10.0
-    TransactionLog secondTl = auctionService.processShoutCreate(buy1).findAll {it instanceof TransactionLog}.first()
+    output = auctionService.processShoutCreate(buy1)
+    assertNotNull(output)
+    TransactionLog secondTl = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook secondOb = output.findAll {it instanceof Orderbook}.first()
 
     sell1.limitPrice = 12.0
     sell1.quantity = 20
-    TransactionLog thirdTl = auctionService.processShoutCreate(sell1).findAll {it instanceof TransactionLog}.first()
+    output = auctionService.processShoutCreate(sell1)
+    assertNotNull(output)
+    TransactionLog thirdTl = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook thirdOb = output.findAll {it instanceof Orderbook}.first()
 
     buy1.limitPrice = 10.0
     buy1.quantity = 30.0
-    TransactionLog fourthTl = auctionService.processShoutCreate(buy1).findAll {it instanceof TransactionLog}.first()
+    output = auctionService.processShoutCreate(buy1)
+    assertNotNull(output)
+    TransactionLog fourthTl = output.findAll {it instanceof TransactionLog}.first()
+    Orderbook fourthOb = output.findAll {it instanceof Orderbook}.first()
 
     //validate
     assertNotNull(firstTl)
@@ -442,11 +454,31 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(firstTl.bid)
     assertNull(firstTl.bidSize)
 
+    assertNotNull(firstOb)
+    assertEquals(13.0, firstOb.ask0)
+    assertEquals(10.0, firstOb.askSize0)
+    assertNull(firstOb.bid0)
+    assertEquals(0.0, firstOb.bidSize0)
+    assertNull(firstOb.bid1)
+    assertEquals(0.0, firstOb.bidSize1)
+    assertNull(firstOb.ask1)
+    assertEquals(0.0, firstOb.askSize1)
+
     assertNotNull(secondTl)
     assertEquals(13.0, secondTl.ask)
     assertEquals(10.0, secondTl.askSize)
     assertEquals(10.0, secondTl.bid)
     assertEquals(10.0, secondTl.bidSize)
+
+    assertNotNull(secondOb)
+    assertEquals(13.0, secondOb.ask0)
+    assertEquals(10.0, secondOb.askSize0)
+    assertEquals(10.0, secondOb.bid0)
+    assertEquals(10.0, secondOb.bidSize0)
+    assertNull(secondOb.bid1)
+    assertEquals(0.0, secondOb.bidSize1)
+    assertNull(secondOb.ask1)
+    assertEquals(0.0, secondOb.askSize1)
 
     assertNotNull(thirdTl)
     assertEquals(12.0, thirdTl.ask)
@@ -454,11 +486,32 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, thirdTl.bid)
     assertEquals(10.0, thirdTl.bidSize)
 
+    assertNotNull(thirdOb)
+    assertEquals(12.0, thirdOb.ask0)
+    assertEquals(20.0, thirdOb.askSize0)
+    assertEquals(10.0, thirdOb.bid0)
+    assertEquals(10.0, thirdOb.bidSize0)
+    assertNull(thirdOb.bid1)
+    assertEquals(0.0, thirdOb.bidSize1)
+    assertEquals(13.0, thirdOb.ask1)
+    assertEquals(10.0, thirdOb.askSize1)
+
     assertNotNull(fourthTl)
     assertEquals(12.0, fourthTl.ask)
     assertEquals(20.0, fourthTl.askSize)
     assertEquals(10.0, fourthTl.bid)
     assertEquals(40.0, fourthTl.bidSize)
+
+    assertNotNull(fourthOb)
+    assertEquals(12.0, fourthOb.ask0)
+    assertEquals(20.0, fourthOb.askSize0)
+    assertEquals(10.0, fourthOb.bid0)
+    assertEquals(40.0, fourthOb.bidSize0)
+    assertNull(fourthOb.bid1)
+    assertEquals(0.0, fourthOb.bidSize1)
+    assertEquals(13.0, fourthOb.ask1)
+    assertEquals(10.0, fourthOb.askSize1)
+
 
     TransactionLog firstPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('ask', 13.0)
@@ -470,6 +523,21 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull(firstPersistedTl)
     assertFalse(firstPersistedTl.latest)
 
+    Orderbook firstPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 13.0)
+      eq('askSize0', 10.0)
+      isNull('bid0')
+      eq('bidSize0', 0.0)
+    }
+
+    assertNotNull(firstPersistedOb)
+    assertFalse(firstPersistedOb.latest)
+    assertNull(firstPersistedOb.bid1)
+    assertEquals(0.0, firstPersistedOb.bidSize1)
+    assertNull(firstPersistedOb.ask1)
+    assertEquals(0.0, firstPersistedOb.askSize1)
+
+
     TransactionLog secondPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('ask', 13.0)
       eq('askSize', 10.0)
@@ -479,6 +547,20 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     assertNotNull(secondPersistedTl)
     assertFalse(secondPersistedTl.latest)
+
+    Orderbook secondPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 13.0)
+      eq('askSize0', 10.0)
+      eq('bid0', 10.0)
+      eq('bidSize0', 10.0)
+    }
+
+    assertNotNull(secondPersistedOb)
+    assertFalse(secondPersistedOb.latest)
+    assertNull(secondPersistedOb.bid1)
+    assertEquals(0.0, secondPersistedOb.bidSize1)
+    assertNull(secondPersistedOb.ask1)
+    assertEquals(0.0, secondPersistedOb.askSize1)
 
     TransactionLog thirdPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('ask', 12.0)
@@ -490,6 +572,22 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull(thirdPersistedTl)
     assertFalse(thirdPersistedTl.latest)
 
+    Orderbook thirdPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 12.0)
+      eq('askSize0', 20.0)
+      eq('bid0', 10.0)
+      eq('bidSize0', 10.0)
+    }
+
+    assertNotNull(thirdPersistedOb)
+    assertFalse(thirdPersistedOb.latest)
+    assertNull(thirdPersistedOb.bid1)
+    assertEquals(0.0, thirdPersistedOb.bidSize1)
+    assertEquals(13.0, thirdPersistedOb.ask1)
+    assertEquals(10.0, thirdPersistedOb.askSize1)
+    assertNull(thirdPersistedOb.ask2)
+    assertEquals(0.0, thirdPersistedOb.askSize2)
+
     TransactionLog fourthPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('ask', 12.0)
       eq('askSize', 20.0)
@@ -499,6 +597,22 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     assertNotNull(fourthPersistedTl)
     assert (fourthPersistedTl.latest)
+
+    Orderbook fourthPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('ask0', 12.0)
+      eq('askSize0', 20.0)
+      eq('bid0', 10.0)
+      eq('bidSize0', 40.0)
+    }
+
+    assertNotNull(fourthPersistedOb)
+    assert (fourthPersistedOb.latest)
+    assertNull(fourthPersistedOb.bid1)
+    assertEquals(0.0, fourthPersistedOb.bidSize1)
+    assertEquals(13.0, fourthPersistedOb.ask1)
+    assertEquals(10.0, fourthPersistedOb.askSize1)
+    assertNull(thirdPersistedOb.ask2)
+    assertEquals(0.0, thirdPersistedOb.askSize2)
   }
 
   void testQuoteAndOrderbookUpdateAfterShoutDeletion() {
@@ -531,19 +645,42 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0.0, obAfterDelete.askSize0)
     assert (obAfterDelete.latest)
 
-    TransactionLog tlBeforeDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    TransactionLog persistedTlBeforeDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 10.0)
       eq('latest', false)
     }
-    assertNotNull(tlBeforeDelete)
+    assertNotNull(persistedTlBeforeDelete)
+    assertNull(persistedTlBeforeDelete.bid)
+    assertNull(persistedTlBeforeDelete.bidSize)
 
-    Orderbook obBeforeDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+    Orderbook persistedObBeforeDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('ask0', 15.0)
       eq('askSize0', 10.0)
       eq('latest', false)
     }
-    assertNotNull(obBeforeDelete)
+    assertNotNull(persistedObBeforeDelete)
+    assertNull(persistedObBeforeDelete.bid0)
+    assertEquals(0.0, persistedObBeforeDelete.bidSize0)
+
+    TransactionLog persistedTlAferDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+      isNull('ask')
+      isNull('askSize')
+      eq('latest', true)
+    }
+    assertNotNull(persistedTlAferDelete)
+    assertNull(persistedTlAferDelete.bid)
+    assertNull(persistedTlAferDelete.bidSize)
+
+    Orderbook persistedObAfterDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      isNull('ask0')
+      eq('askSize0', 0.0)
+      eq('latest', true)
+    }
+    assertNotNull(persistedObAfterDelete)
+    assertNull(persistedObAfterDelete.bid0)
+    assertEquals(0.0, persistedObAfterDelete.bidSize0)
+
   }
 
   void testQuoteAndOrderbookUpdateAfterShoutQuantityUpdate() {
