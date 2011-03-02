@@ -40,12 +40,11 @@ class AuctionService implements Auctioneer {
   List processShoutCreate(ShoutDoCreateCmd shoutDoCreate) {
     List output = []
 
-    if (shoutDoCreate.orderType == OrderType.MARKET) throw new ShoutCreationException("Market oder type is not supported in this version.")
+    if (shoutDoCreate.orderType == OrderType.MARKET) log.error("Market order type is not supported in this version.")
 
     Shout shoutInstance = new Shout()
 
     shoutInstance.broker = shoutDoCreate.broker
-    shoutInstance.competition = shoutDoCreate.competition
 
     shoutInstance.product = shoutDoCreate.product
     shoutInstance.timeslot = shoutDoCreate.timeslot
@@ -55,11 +54,11 @@ class AuctionService implements Auctioneer {
     shoutInstance.orderType = shoutDoCreate.orderType
 
     shoutInstance.modReasonCode = ModReasonCode.INSERT
-    shoutInstance.shoutId = IdGenerator.createId()
-    shoutInstance.transactionId = shoutInstance.shoutId
-    shoutInstance.latest = true
+    //shoutInstance.shoutId = IdGenerator.createId()
+    shoutInstance.transactionId = shoutInstance.id
+    //shoutInstance.latest = true
 
-    if (!shoutInstance.save()) throw new ShoutCreationException("Failed to create shout: ${shoutInstance.errors}")
+    if (!shoutInstance.save()) log.error("Failed to create shout: ${shoutInstance.errors}")
 
 
     Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
@@ -81,10 +80,10 @@ class AuctionService implements Auctioneer {
   public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
     List output = []
     def shoutId = shoutDoDeleteCmd.shoutId
-    if (!shoutId) throw new ShoutDeletionException("Failed to delete shout. No shout id found: ${shoutId}.")
+    if (!shoutId) log.error("Failed to delete shout. No shout id found: ${shoutId}.")
 
     def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) throw new ShoutDeletionException("Failed to delete shout. No shout found for id: ${shoutId}")
+    if (!shoutInstance) log.error("Failed to delete shout. No shout found for id: ${shoutId}")
 
     Shout delShout = processShoutDelete(shoutInstance)
     output << delShout
@@ -144,8 +143,7 @@ class AuctionService implements Auctioneer {
 
   public List clearMarket() {
     List resultingList = []
-    def currentCompetition = Competition.findByCurrent(true)
-    def products = Product.findAllByCompetition(currentCompetition)
+    def products = Product.findAll()
     def timeslots = Timeslot.findAllByEnabled(true)
 
     // Find and process all shout candidates for each timeslot and each product
@@ -160,14 +158,13 @@ class AuctionService implements Auctioneer {
 
         Map stat = calcUniformPrice(candidates)
         stat.product = product
-        stat.competition = currentCompetition
         stat.timeslot = timeslot
         stat.transactionId = IdGenerator.createId() //Todo: Set transactionId properly
 
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!stat.executableVolume || !stat.price) throw new MarketClearingException("Stats did not contain information on executable volume and / or price.")
+        if (!stat.executableVolume || !stat.price) log.error("Stats did not contain information on executable volume and / or price.")
 
         if (candidates?.size() < 1) {
           stat.allocationStatus = "No Shouts found for allocation."
@@ -258,13 +255,13 @@ class AuctionService implements Auctioneer {
    *
    * @return list that contains updated allocatedShout (index 0) and updated aggregQuantityAllocated (index 1)
    */
-  private List allocateSingleShout(Shout incomingShout, BigDecimal aggregQuantityAllocated, Map stat) throws MarketClearingException {
+  private List allocateSingleShout(Shout incomingShout, BigDecimal aggregQuantityAllocated, Map stat) {
 
     BigDecimal executableVolume = stat.executableVolume
     BigDecimal price = stat.price
     Shout allocatedShout
 
-    if (!incomingShout.validate()) throw new MarketClearingException("Failed to validate shout when allocating single shout: ${incomingShout.errors}")
+    if (!incomingShout.validate()) log.error("Failed to validate shout when allocating single shout: ${incomingShout.errors}")
 
     if (incomingShout.quantity + aggregQuantityAllocated <= executableVolume) {
       allocatedShout = incomingShout.initModification(ModReasonCode.EXECUTION)
@@ -275,7 +272,7 @@ class AuctionService implements Auctioneer {
       allocatedShout.executionQuantity = executableVolume - aggregQuantityAllocated
       allocatedShout.quantity = incomingShout.quantity - allocatedShout.executionQuantity
     } else {
-      throw new MarketClearingException("Market could not be cleared. Unexpected conditions when allocating single shout")
+      log.error("Market could not be cleared. Unexpected conditions when allocating single shout")
     }
     allocatedShout.executionPrice = price
     allocatedShout.transactionId = stat.transactionId
@@ -300,7 +297,6 @@ class AuctionService implements Auctioneer {
     Boolean latestTransactionLogExists = true
 
     TransactionLog latestTransactionLog = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
-      eq('competition', orderbook.competition)
       eq('product', orderbook.product)
       eq('timeslot', orderbook.timeslot)
       eq('transactionType', TransactionType.QUOTE)
@@ -320,12 +316,11 @@ class AuctionService implements Auctioneer {
 
       if (latestTransactionLogExists) {
         latestTransactionLog.latest = false
-        if (!latestTransactionLog.save()) throw new MarketClearingException("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
+        if (!latestTransactionLog.save()) log.error("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
       }
 
       newTransactionLog = new TransactionLog()
       newTransactionLog.transactionType = TransactionType.QUOTE
-      newTransactionLog.competition = orderbook.competition
       newTransactionLog.product = orderbook.product
       newTransactionLog.timeslot = orderbook.timeslot
       newTransactionLog.transactionId = orderbook.transactionId
@@ -336,7 +331,7 @@ class AuctionService implements Auctioneer {
       newTransactionLog.ask = (orderbook.ask0 ?: null)
       newTransactionLog.askSize = (orderbook.askSize0 ?: null)
 
-      if (!newTransactionLog.save()) throw new MarketClearingException("Failed to save new Quote TransactionLog: ${newTransactionLog.errors}")
+      if (!newTransactionLog.save()) log.error("Failed to save new Quote TransactionLog: ${newTransactionLog.errors}")
     }
 
     return newTransactionLog
@@ -352,7 +347,7 @@ class AuctionService implements Auctioneer {
    *
    * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
    */
-  private TransactionLog writeTradeLog(Map stat) throws MarketClearingException {
+  private TransactionLog writeTradeLog(Map stat) {
 
     TransactionLog oldTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('product', stat.product)
@@ -363,12 +358,11 @@ class AuctionService implements Auctioneer {
 
     if (oldTl) {
       oldTl.latest = false
-      if (!oldTl.save()) throw new MarketClearingException("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
+      if (!oldTl.save()) log.error("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
     }
 
     TransactionLog tl = new TransactionLog()
     tl.transactionType = TransactionType.TRADE
-    tl.competition = stat.competition
     tl.product = stat.product
     tl.timeslot = stat.timeslot
     tl.transactionId = stat.transactionId
@@ -377,7 +371,7 @@ class AuctionService implements Auctioneer {
     tl.price = stat.price
     tl.quantity = stat.executableVolume
 
-    if (!tl.save()) throw new MarketClearingException("Failed to save TransactionLog after clearing: ${tl.errors}")
+    if (!tl.save()) log.error("Failed to save TransactionLog after clearing: ${tl.errors}")
     return tl
   }
 
@@ -498,12 +492,12 @@ class AuctionService implements Auctioneer {
     if (orderbookChangeFound) {
       if (!firstOrderbook) {
         latestOrderbook.latest = false
-        if (!latestOrderbook.save()) throw new MarketClearingException("Failed to save outdated Orderbook:${latestOrderbook.errors}")
+        if (!latestOrderbook.save()) log.error("Failed to save outdated Orderbook:${latestOrderbook.errors}")
       }
 
-      def newOrderbook = new Orderbook(competition: shout.competition, product: shout.product, timeslot: shout.timeslot, transactionId: shout.transactionId, dateExecuted: shout.dateMod, latest: true)
+      def newOrderbook = new Orderbook(product: shout.product, timeslot: shout.timeslot, transactionId: shout.transactionId, dateExecuted: shout.dateMod, latest: true)
       newOrderbook.setOrderbookArray(newOrderbookArray)
-      if (!newOrderbook.save()) throw new MarketClearingException("Failed to save updated Orderbook: ${newOrderbook.errors}")
+      if (!newOrderbook.save()) log.error("Failed to save updated Orderbook: ${newOrderbook.errors}")
 
       return newOrderbook
     }
@@ -520,7 +514,6 @@ class AuctionService implements Auctioneer {
     CashDoUpdateCmd cashUpdate = new CashDoUpdateCmd()
 
     cashUpdate.broker = shout.broker
-    cashUpdate.competition = shout.competition
     cashUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? shout.executionPrice * shout.executionQuantity : -shout.executionPrice * shout.executionQuantity
     cashUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
     cashUpdate.origin = "org.powertac.auctioneer.pda"
@@ -532,7 +525,6 @@ class AuctionService implements Auctioneer {
     PositionDoUpdateCmd posUpdate = new PositionDoUpdateCmd()
 
     posUpdate.broker = shout.broker
-    posUpdate.competition = shout.competition
     posUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? -shout.executionQuantity : shout.executionQuantity
     posUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
     posUpdate.origin = "org.powertac.auctioneer.pda"

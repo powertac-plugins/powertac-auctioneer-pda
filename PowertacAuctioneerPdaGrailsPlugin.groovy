@@ -4,7 +4,7 @@ class PowertacAuctioneerPdaGrailsPlugin {
     // the version or versions of Grails the plugin is designed for
     def grailsVersion = "1.3.4 > *"
     // the other plugins this plugin depends on
-    def dependsOn = [powertacCommon:'0.5-SNAPSHOT']
+    def dependsOn = [powertacCommon:'0.9 > *']
     // resources that are excluded from plugin packaging
     def pluginExcludes = [
             "grails-app/views/error.gsp"
