@@ -2,7 +2,7 @@ package org.powertac.auctioneer.pda
 
 import grails.test.GrailsUnitTestCase
 import org.joda.time.Instant
-import org.powertac.common.command.ShoutDoCreateCmd
+import org.powertac.common.msg.ShoutDoCreateCmd
 import org.powertac.common.Competition
 import org.powertac.common.Broker
 import org.powertac.common.Product
@@ -12,10 +12,10 @@ import org.powertac.common.enumerations.OrderType
 import org.powertac.common.Shout
 import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.Timeslot
-import org.powertac.common.command.ShoutDoDeleteCmd
-import org.powertac.common.command.ShoutDoUpdateCmd
-import org.powertac.common.command.CashDoUpdateCmd
-import org.powertac.common.command.PositionDoUpdateCmd
+import org.powertac.common.msg.ShoutDoDeleteCmd
+import org.powertac.common.msg.ShoutDoUpdateCmd
+import org.powertac.common.msg.CashDoUpdateCmd
+import org.powertac.common.msg.PositionDoUpdateCmd
 import org.powertac.common.TransactionLog
 import org.powertac.common.enumerations.TransactionType
 import javax.transaction.Transaction
