@@ -27,7 +27,7 @@ class AuctionService implements Auctioneer {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
-
+  
   /*
   * Implement Auctioneer interface methods
   */
@@ -54,12 +54,13 @@ class AuctionService implements Auctioneer {
     shoutInstance.orderType = shoutDoCreate.orderType
 
     shoutInstance.modReasonCode = ModReasonCode.INSERT
-    //shoutInstance.shoutId = IdGenerator.createId()
     shoutInstance.transactionId = shoutInstance.id
-    //shoutInstance.latest = true
 
-    if (!shoutInstance.save()) log.error("Failed to create shout: ${shoutInstance.errors}")
-
+    if (!shoutInstance.save()) {
+      println shoutInstance.errors.each { it.toString() }
+      log.error("Failed to create shout: ${shoutInstance.errors}")
+      return output
+    }
 
     Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
     if (updatedOrderbook) {
@@ -80,11 +81,16 @@ class AuctionService implements Auctioneer {
   public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
     List output = []
     def shoutId = shoutDoDeleteCmd.shoutId
-    if (!shoutId) log.error("Failed to delete shout. No shout id found: ${shoutId}.")
+    if (!shoutId) {
+      log.error("Failed to delete shout. No shout id found: ${shoutId}.")
+      return output
+    }
 
-    def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) log.error("Failed to delete shout. No shout found for id: ${shoutId}")
-
+    def shoutInstance = Shout.findByShoutId(shoutId, true)
+    if (!shoutInstance) {
+      log.error("Failed to delete shout. No shout found for id: ${shoutId}")
+      return output
+    }
     Shout delShout = processShoutDelete(shoutInstance)
     output << delShout
 
@@ -102,7 +108,6 @@ class AuctionService implements Auctioneer {
 
     def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
     delShout.transactionId = IdGenerator.createId()
-    delShout.latest = false
     if (!delShout.save()) throw new ShoutDeletionException("Failed to save latest version of deleted shout: ${shoutInstance.errors}")
 
     return delShout
@@ -116,11 +121,15 @@ class AuctionService implements Auctioneer {
   public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
     List output = []
     def shoutId = shoutDoUpdateCmd.shoutId
-    if (!shoutId) throw new ShoutUpdateException("Failed to update shout. No shout id found: ${shoutId}.")
-
-    def shoutInstance = Shout.findByShoutIdAndLatest(shoutId, true)
-    if (!shoutInstance) throw new ShoutUpdateException("Failed to update shout, No shout found for id: ${shoutId}")
-
+    if (!shoutId) {
+      log.error("Failed to update shout. No shout id found: ${shoutId}.")
+      return output
+    }
+    def shoutInstance = Shout.findByShoutId(shoutId, true)
+    if (!shoutInstance) {
+      log.error("Failed to update shout, No shout found for id: ${shoutId}")
+      return output
+    }
 
     def delShout = processShoutDelete(shoutInstance)
     Shout updatedShout = delShout.initModification(ModReasonCode.MODIFICATION)
@@ -129,7 +138,10 @@ class AuctionService implements Auctioneer {
     updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice ?: delShout.limitPrice
     updatedShout.transactionId = IdGenerator.createId()
 
-    if (!updatedShout.save()) throw new ShoutUpdateException("Failed to save latet version of updated shout: ${updatedShout.errors}")
+    if (!updatedShout.save()) {
+      log.error("Failed to save latet version of updated shout: ${updatedShout.errors}")
+      return output
+    }
 
     Orderbook updatedOrderbook = updateOrderbook(updatedShout)
     if (updatedOrderbook) {
@@ -153,7 +165,6 @@ class AuctionService implements Auctioneer {
         def candidates = Shout.withCriteria {
           eq('product', product)
           eq('timeslot', timeslot)
-          eq('latest', true)
         }
 
         Map stat = calcUniformPrice(candidates)
@@ -300,7 +311,6 @@ class AuctionService implements Auctioneer {
       eq('product', orderbook.product)
       eq('timeslot', orderbook.timeslot)
       eq('transactionType', TransactionType.QUOTE)
-      eq('latest', true)
     }
 
     if (!latestTransactionLog) {
@@ -314,17 +324,17 @@ class AuctionService implements Auctioneer {
             || latestTransactionLog.askSize != orderbook.askSize0) {
 
 
-      if (latestTransactionLogExists) {
-        latestTransactionLog.latest = false
-        if (!latestTransactionLog.save()) log.error("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
-      }
+      //if (latestTransactionLogExists) {
+      //  latestTransactionLog.latest = false
+      //  if (!latestTransactionLog.save()) log.error("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
+      //}
 
-      newTransactionLog = new TransactionLog()
+      newTransactionLog = latestTransactionLog
       newTransactionLog.transactionType = TransactionType.QUOTE
       newTransactionLog.product = orderbook.product
       newTransactionLog.timeslot = orderbook.timeslot
       newTransactionLog.transactionId = orderbook.transactionId
-      newTransactionLog.latest = true
+      //newTransactionLog.latest = true
 
       newTransactionLog.bid = (orderbook.bid0 ?: null)
       newTransactionLog.bidSize = (orderbook.bidSize0 ?: null)
@@ -349,24 +359,23 @@ class AuctionService implements Auctioneer {
    */
   private TransactionLog writeTradeLog(Map stat) {
 
-    TransactionLog oldTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    TransactionLog tl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
       eq('product', stat.product)
       eq('timeslot', stat.timeslot)
       eq('transactionType', TransactionType.TRADE)
-      eq('latest', true)
     }
 
-    if (oldTl) {
-      oldTl.latest = false
-      if (!oldTl.save()) log.error("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
-    }
+    //if (oldTl) {
+    //  oldTl.latest = false
+    //  if (!oldTl.save()) log.error("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
+    //}
 
-    TransactionLog tl = new TransactionLog()
+    if (tl == null)
+      tl = new TransactionLog()
     tl.transactionType = TransactionType.TRADE
     tl.product = stat.product
     tl.timeslot = stat.timeslot
     tl.transactionId = stat.transactionId
-    tl.latest = true
 
     tl.price = stat.price
     tl.quantity = stat.executableVolume
@@ -389,7 +398,6 @@ class AuctionService implements Auctioneer {
     Orderbook latestOrderbook = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
-      eq('latest', true)
     }
 
     if (!latestOrderbook) {
@@ -401,7 +409,6 @@ class AuctionService implements Auctioneer {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
       eq('buySellIndicator', BuySellIndicator.SELL)
-      eq('latest', true)
       maxResults(10)
       order('limitPrice', 'asc')
 
@@ -415,7 +422,6 @@ class AuctionService implements Auctioneer {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
       eq('buySellIndicator', BuySellIndicator.BUY)
-      eq('latest', true)
       maxResults(10)
       order('limitPrice', 'desc')
 
@@ -491,15 +497,18 @@ class AuctionService implements Auctioneer {
     //If there are changes found create new orderbook entry
     if (orderbookChangeFound) {
       if (!firstOrderbook) {
-        latestOrderbook.latest = false
+        //latestOrderbook.latest = false
         if (!latestOrderbook.save()) log.error("Failed to save outdated Orderbook:${latestOrderbook.errors}")
       }
 
-      def newOrderbook = new Orderbook(product: shout.product, timeslot: shout.timeslot, transactionId: shout.transactionId, dateExecuted: shout.dateMod, latest: true)
-      newOrderbook.setOrderbookArray(newOrderbookArray)
-      if (!newOrderbook.save()) log.error("Failed to save updated Orderbook: ${newOrderbook.errors}")
+      latestOrderbook.product = shout.product
+      latestOrderbook.timeslot = shout.timeslot
+      latestOrderbook.transactionId = shout.transactionId
+      latestOrderbook.dateExecuted = shout.dateMod
+      latestOrderbook.setOrderbookArray(newOrderbookArray)
+      if (!latestOrderbook.save()) log.error("Failed to save updated Orderbook: ${newOrderbook.errors}")
 
-      return newOrderbook
+      return latestOrderbook
     }
     return null
   }

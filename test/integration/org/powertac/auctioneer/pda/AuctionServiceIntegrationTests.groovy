@@ -39,7 +39,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   
   protected void setUp() {
     super.setUp()
-
+    timeService.currentTime = new Instant()
     competition = new Competition(name: "sampleCompetition", enabled: true, current: true)
     assert (competition.save())
     sampleSeller = new Broker(userName: "SampleSeller")
@@ -75,7 +75,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     }
     assertNotNull s1
     assertEquals(ModReasonCode.INSERT, s1.modReasonCode)
-    assertNotNull s1.shoutId
+    assertNotNull s1.id
     assertNotNull s1.transactionId
 
   }
@@ -92,7 +92,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     }
     assertNotNull b1
     assertEquals(ModReasonCode.INSERT, b1.modReasonCode)
-    assertNotNull b1.shoutId
+    assertNotNull b1.id
     assertNotNull b1.transactionId
 
   }
@@ -114,7 +114,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     }
     assertNotNull s1
     assertEquals(ModReasonCode.INSERT, s1.modReasonCode)
-    assertNotNull s1.shoutId
+    assertNotNull s1.id
     assertNotNull s1.transactionId
 
     Shout b1 = (Shout) Shout.withCriteria(uniqueResult: true) {
@@ -123,7 +123,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     }
     assertNotNull b1
     assertEquals(ModReasonCode.INSERT, b1.modReasonCode)
-    assertNotNull b1.shoutId
+    assertNotNull b1.id
     assertNotNull b1.transactionId
   }
 
@@ -142,20 +142,19 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull s1
 
     //action
-    def delSell1 = new ShoutDoDeleteCmd(broker: sampleSeller, shoutId: s1.shoutId)
+    def delSell1 = new ShoutDoDeleteCmd(broker: sampleSeller, shoutId: s1.id)
     auctionService.processShoutDelete(delSell1)
 
     //validate
-    assertEquals(2, Shout.list().size())
+    assertEquals(1, Shout.list().size())
 
-    Shout oldS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.INSERT)
-      //eq('latest', false)
-    }
-    assertNotNull oldS1
-    assertEquals(s1.shoutId, oldS1.shoutId)
+    //Shout oldS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
+    //  eq('limitPrice', 10.0)
+    //  eq('quantity', 10.0)
+    //  eq('modReasonCode', ModReasonCode.INSERT)
+    //}
+    //assertNotNull oldS1
+    //assertEquals(s1.shoutId, oldS1.shoutId)
 
     Shout delS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
       eq('limitPrice', 10.0)
@@ -164,9 +163,9 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
       //eq('latest', false)
     }
     assertNotNull delS1
-    assertEquals(s1.shoutId, delS1.shoutId)
+    //assertEquals(s1.shoutId, delS1.shoutId)
     assertNotNull delS1.transactionId
-    assertNotSame(oldS1.transactionId, delS1.transactionId)
+    //assertNotSame(oldS1.transactionId, delS1.transactionId)
   }
 
   void testUpdateOfShout() {
@@ -183,7 +182,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull s1
 
     //action
-    def updateSell1 = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: s1.shoutId, quantity: 20.0, limitPrice: 9.0)
+    def updateSell1 = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: s1.id, quantity: 20.0, limitPrice: 9.0)
     auctionService.processShoutUpdate(updateSell1)
 
     //validate
