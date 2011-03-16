@@ -16,8 +16,8 @@ import org.powertac.common.msg.ShoutDoDeleteCmd
 import org.powertac.common.msg.ShoutDoUpdateCmd
 import org.powertac.common.msg.CashDoUpdateCmd
 import org.powertac.common.msg.PositionDoUpdateCmd
-import org.powertac.common.TransactionLog
-import org.powertac.common.enumerations.TransactionType
+import org.powertac.common.MarketTransaction
+import org.powertac.common.enumerations.MarketTransactionType
 import javax.transaction.Transaction
 import org.powertac.common.Orderbook
 
@@ -260,20 +260,20 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   void testTradeLog() {
     //init
     Map stat = ['executableVolume': 100.0, 'price': 15.0, 'product': sampleProduct, 'timeslot': sampleTimeslot, 'transactionId': "123abc"]
-    TransactionLog returnedTl = auctionService.writeTradeLog(stat)
+    MarketTransaction returnedTl = auctionService.writeTradeLog(stat)
 
     //validate
-    assertEquals(1, TransactionLog.list().size())
-    TransactionLog persistedTl = TransactionLog.list().first()
+    assertEquals(1, MarketTransaction.list().size())
+    MarketTransaction persistedTl = MarketTransaction.list().first()
     assert persistedTl.latest
-    assertEquals(TransactionType.TRADE, persistedTl.transactionType)
+    assertEquals(MarketTransactionType.TRADE, persistedTl.transactionType)
     assertEquals(stat.price, persistedTl.price)
     assertEquals(stat.executableVolume, persistedTl.quantity)
     assertEquals(sampleProduct, persistedTl.product)
     assertEquals(stat.transactionId, persistedTl.transactionId)
 
     assert returnedTl.latest
-    assertEquals(TransactionType.TRADE, returnedTl.transactionType)
+    assertEquals(MarketTransactionType.TRADE, returnedTl.transactionType)
     assertEquals(stat.price, returnedTl.price)
     assertEquals(stat.executableVolume, returnedTl.quantity)
     assertEquals(sampleProduct, returnedTl.product)
@@ -358,7 +358,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20)
 
     //action
-    TransactionLog tl = auctionService.updateQuote(orderbook)
+    MarketTransaction tl = auctionService.updateQuote(orderbook)
 
     //validate
     assertNotNull(tl)
@@ -377,7 +377,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, ask0: 10.0, askSize0: 20)
 
     //action
-    TransactionLog tl = auctionService.updateQuote(orderbook)
+    MarketTransaction tl = auctionService.updateQuote(orderbook)
 
     //validate
     assertNotNull(tl)
@@ -396,7 +396,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20, ask0: 13, askSize0: 10)
 
     //action
-    TransactionLog tl = auctionService.updateQuote(orderbook)
+    MarketTransaction tl = auctionService.updateQuote(orderbook)
 
     //validate
     assertNotNull(tl)
@@ -416,28 +416,28 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sell1.quantity = 10.0
     List output = auctionService.processShoutCreate(sell1)
     assertNotNull(output)
-    TransactionLog firstTl = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction firstTl = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook firstOb = output.findAll {it instanceof Orderbook}.first()
 
     buy1.limitPrice = 10.0
     buy1.quantity = 10.0
     output = auctionService.processShoutCreate(buy1)
     assertNotNull(output)
-    TransactionLog secondTl = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction secondTl = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook secondOb = output.findAll {it instanceof Orderbook}.first()
 
     sell1.limitPrice = 12.0
     sell1.quantity = 20
     output = auctionService.processShoutCreate(sell1)
     assertNotNull(output)
-    TransactionLog thirdTl = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction thirdTl = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook thirdOb = output.findAll {it instanceof Orderbook}.first()
 
     buy1.limitPrice = 10.0
     buy1.quantity = 30.0
     output = auctionService.processShoutCreate(buy1)
     assertNotNull(output)
-    TransactionLog fourthTl = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction fourthTl = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook fourthOb = output.findAll {it instanceof Orderbook}.first()
 
     //validate
@@ -506,7 +506,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, fourthOb.askSize1)
 
 
-    TransactionLog firstPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction firstPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 13.0)
       eq('askSize', 10.0)
       isNull('bid')
@@ -531,7 +531,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0.0, firstPersistedOb.askSize1)
 
 
-    TransactionLog secondPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction secondPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 13.0)
       eq('askSize', 10.0)
       eq('bid', 10.0)
@@ -555,7 +555,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(secondPersistedOb.ask1)
     assertEquals(0.0, secondPersistedOb.askSize1)
 
-    TransactionLog thirdPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction thirdPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 12.0)
       eq('askSize', 20.0)
       eq('bid', 10.0)
@@ -581,7 +581,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(thirdPersistedOb.ask2)
     assertEquals(0.0, thirdPersistedOb.askSize2)
 
-    TransactionLog fourthPersistedTl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction fourthPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 12.0)
       eq('askSize', 20.0)
       eq('bid', 10.0)
@@ -620,7 +620,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //action
     List output = auctionService.processShoutDelete(myShoutDoDeleteCmd)
     assertNotNull(output)
-    TransactionLog tlAfterDelete = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction tlAfterDelete = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook obAfterDelete = output.findAll {it instanceof Orderbook}.first()
 
     //validate
@@ -638,7 +638,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0.0, obAfterDelete.askSize0)
     assert (obAfterDelete.latest)
 
-    TransactionLog persistedTlBeforeDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlBeforeDelete = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 10.0)
       eq('latest', false)
@@ -656,7 +656,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(persistedObBeforeDelete.bid0)
     assertEquals(0.0, persistedObBeforeDelete.bidSize0)
 
-    TransactionLog persistedTlAferDelete = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlAferDelete = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       isNull('ask')
       isNull('askSize')
       //eq('latest', true)
@@ -693,7 +693,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //validate
 
     assertNotNull(output)
-    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
 
     assertNotNull(tlAfterUpdate)
@@ -710,7 +710,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(20.0, obAfterUpdate.askSize0)
     assert (obAfterUpdate.latest)
 
-    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 10.0)
       //eq('latest', false)
@@ -728,7 +728,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(persistedObBeforeUpdate.bid0)
     assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
 
-    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 20.0)
       //eq('latest', true)
@@ -765,7 +765,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //validate
 
     assertNotNull(output)
-    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
 
     assertNotNull(tlAfterUpdate)
@@ -782,7 +782,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, obAfterUpdate.askSize0)
     assert (obAfterUpdate.latest)
 
-    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 10.0)
       //eq('latest', false)
@@ -800,7 +800,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(persistedObBeforeUpdate.bid0)
     assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
 
-    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 10.0)
       eq('askSize', 10.0)
       //eq('latest', true)
@@ -838,7 +838,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //validate
 
     assertNotNull(output)
-    TransactionLog tlAfterUpdate = output.findAll {it instanceof TransactionLog}.first()
+    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
     Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
 
     assertNotNull(tlAfterUpdate)
@@ -855,7 +855,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(20.0, obAfterUpdate.askSize0)
     //assert (obAfterUpdate.latest)
 
-    TransactionLog persistedTlBeforeUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 15.0)
       eq('askSize', 10.0)
       //eq('latest', false)
@@ -873,7 +873,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(persistedObBeforeUpdate.bid0)
     assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
 
-    TransactionLog persistedTlAfterUpdate = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('ask', 10.0)
       eq('askSize', 20.0)
       //eq('latest', true)
@@ -1192,7 +1192,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(ModReasonCode.EXECUTION, updatedBuy.modReasonCode)
     assertEquals(sampleBuyer, updatedBuy.broker)
 
-    TransactionLog tradeLog = results.findAll {it instanceof TransactionLog && it.transactionType == TransactionType.TRADE}.first()
+    MarketTransaction tradeLog = results.findAll {it instanceof MarketTransaction && it.transactionType == MarketTransactionType.TRADE}.first()
     assertEquals(11.0, tradeLog.price)
     assertEquals(10.0, tradeLog.quantity)
     assertEquals(sampleProduct, tradeLog.product)

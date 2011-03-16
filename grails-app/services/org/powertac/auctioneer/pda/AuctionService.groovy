@@ -12,9 +12,9 @@ import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
 import org.powertac.common.Product
 import org.powertac.common.enumerations.BuySellIndicator
-import org.powertac.common.TransactionLog
+import org.powertac.common.MarketTransaction
 import org.powertac.common.exceptions.MarketClearingException
-import org.powertac.common.enumerations.TransactionType
+import org.powertac.common.enumerations.MarketTransactionType
 import org.powertac.common.msg.CashDoUpdateCmd
 import org.powertac.common.msg.PositionDoUpdateCmd
 import org.powertac.common.enumerations.OrderType
@@ -65,7 +65,7 @@ class AuctionService implements Auctioneer {
     Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
     if (updatedOrderbook) {
       output << updatedOrderbook
-      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
       if (updatedQuote) output << updatedQuote
     }
 
@@ -97,7 +97,7 @@ class AuctionService implements Auctioneer {
     Orderbook updatedOrderbook = updateOrderbook(delShout)
     if (updatedOrderbook) {
       output << updatedOrderbook
-      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
       if (updatedQuote) output << updatedQuote
     }
 
@@ -146,7 +146,7 @@ class AuctionService implements Auctioneer {
     Orderbook updatedOrderbook = updateOrderbook(updatedShout)
     if (updatedOrderbook) {
       output << updatedOrderbook
-      TransactionLog updatedQuote = updateQuote(updatedOrderbook)
+      MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
       if (updatedQuote) output << updatedQuote
     }
 
@@ -303,18 +303,18 @@ class AuctionService implements Auctioneer {
    *
    * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
    */
-  private TransactionLog updateQuote(Orderbook orderbook) {
-    TransactionLog newTransactionLog
+  private MarketTransaction updateQuote(Orderbook orderbook) {
+    MarketTransaction newTransactionLog
     Boolean latestTransactionLogExists = true
 
-    TransactionLog latestTransactionLog = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction latestTransactionLog = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('product', orderbook.product)
       eq('timeslot', orderbook.timeslot)
-      eq('transactionType', TransactionType.QUOTE)
+      eq('transactionType', MarketTransactionType.QUOTE)
     }
 
     if (!latestTransactionLog) {
-      latestTransactionLog = new TransactionLog(bidSize: 0.0, askSize: 0.0)
+      latestTransactionLog = new MarketTransaction(bidSize: 0.0, askSize: 0.0)
       latestTransactionLogExists = false
     }
 
@@ -330,7 +330,7 @@ class AuctionService implements Auctioneer {
       //}
 
       newTransactionLog = latestTransactionLog
-      newTransactionLog.transactionType = TransactionType.QUOTE
+      newTransactionLog.transactionType = MarketTransactionType.QUOTE
       newTransactionLog.product = orderbook.product
       newTransactionLog.timeslot = orderbook.timeslot
       newTransactionLog.transactionId = orderbook.transactionId
@@ -357,12 +357,12 @@ class AuctionService implements Auctioneer {
    *
    * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
    */
-  private TransactionLog writeTradeLog(Map stat) {
+  private MarketTransaction writeTradeLog(Map stat) {
 
-    TransactionLog tl = (TransactionLog) TransactionLog.withCriteria(uniqueResult: true) {
+    MarketTransaction tl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('product', stat.product)
       eq('timeslot', stat.timeslot)
-      eq('transactionType', TransactionType.TRADE)
+      eq('transactionType', MarketTransactionType.TRADE)
     }
 
     //if (oldTl) {
@@ -371,8 +371,8 @@ class AuctionService implements Auctioneer {
     //}
 
     if (tl == null)
-      tl = new TransactionLog()
-    tl.transactionType = TransactionType.TRADE
+      tl = new MarketTransaction()
+    tl.transactionType = MarketTransactionType.TRADE
     tl.product = stat.product
     tl.timeslot = stat.timeslot
     tl.transactionId = stat.transactionId
