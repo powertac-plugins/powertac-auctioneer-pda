@@ -1,10 +1,7 @@
 package org.powertac.auctioneer.pda
 
 import org.powertac.common.interfaces.Auctioneer
-import org.powertac.common.msg.ShoutDoCreateCmd
 import org.powertac.common.Shout
-import org.powertac.common.msg.ShoutDoDeleteCmd
-import org.powertac.common.msg.ShoutDoUpdateCmd
 import org.powertac.common.Competition
 import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
@@ -13,10 +10,7 @@ import org.powertac.common.exceptions.ShoutDeletionException
 import org.powertac.common.Product
 import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.MarketTransaction
-import org.powertac.common.exceptions.MarketClearingException
 import org.powertac.common.enumerations.MarketTransactionType
-import org.powertac.common.msg.CashDoUpdateCmd
-import org.powertac.common.msg.PositionDoUpdateCmd
 import org.powertac.common.enumerations.OrderType
 import org.powertac.common.Timeslot
 import org.powertac.common.exceptions.ShoutUpdateException
@@ -37,6 +31,9 @@ class AuctionService implements Auctioneer {
    * Copy properties from incoming ShoutDoCreateCmd to Shout domain class
    * Populate additional properties and save shout
    */
+  
+  // TODO change code to latest common
+  /*
   List processShoutCreate(ShoutDoCreateCmd shoutDoCreate) {
     List output = []
 
@@ -78,6 +75,7 @@ class AuctionService implements Auctioneer {
    * Update/save old version of inserted shout and save/return latest version of deleted shout
    * Todo: Broker and Competition validation?
    */
+  /*
   public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
     List output = []
     def shoutId = shoutDoDeleteCmd.shoutId
@@ -103,7 +101,7 @@ class AuctionService implements Auctioneer {
 
     return output
   }
-
+*/
   private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
 
     def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
@@ -118,6 +116,7 @@ class AuctionService implements Auctioneer {
    * Validate shoutId, shoutInstance
    * Delete old shout and create copy with modified quantity/limitPrice
    */
+  /*
   public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
     List output = []
     def shoutId = shoutDoUpdateCmd.shoutId
@@ -266,6 +265,8 @@ class AuctionService implements Auctioneer {
    *
    * @return list that contains updated allocatedShout (index 0) and updated aggregQuantityAllocated (index 1)
    */
+  
+  /*
   private List allocateSingleShout(Shout incomingShout, BigDecimal aggregQuantityAllocated, Map stat) {
 
     BigDecimal executableVolume = stat.executableVolume
@@ -357,8 +358,8 @@ class AuctionService implements Auctioneer {
    *
    * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
    */
-  private MarketTransaction writeTradeLog(Map stat) {
-
+  private MarketTransaction writeTradeLog(Map stat) 
+  {
     MarketTransaction tl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
       eq('product', stat.product)
       eq('timeslot', stat.timeslot)
@@ -519,6 +520,8 @@ class AuctionService implements Auctioneer {
    *
    * @return cashDoUpdateCommand / positionDoUpdateCommand       *
    */
+  
+  /*
   private CashDoUpdateCmd settleCashUpdate(Shout shout) {
     CashDoUpdateCmd cashUpdate = new CashDoUpdateCmd()
 
@@ -564,5 +567,7 @@ class AuctionService implements Auctioneer {
     //To change body of implemented methods use File | Settings | File Templates.
   }
 
+  public void processShout(Shout shout){return}; // throws ShoutCreationException;
+  public void clearMarket(){return};
 
 }
