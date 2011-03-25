@@ -1,105 +1,95 @@
 package org.powertac.auctioneer.pda
 
-import grails.test.GrailsUnitTestCase
+import org.powertac.common.Shout
 import org.joda.time.Instant
-import org.powertac.common.Competition
+import org.joda.time.DateTime
+import org.joda.time.DateTimeZone
 import org.powertac.common.Broker
 import org.powertac.common.Product
+import org.powertac.common.Timeslot
 import org.powertac.common.enumerations.ProductType
 import org.powertac.common.enumerations.BuySellIndicator
-import org.powertac.common.enumerations.OrderType
-import org.powertac.common.Shout
 import org.powertac.common.enumerations.ModReasonCode
-import org.powertac.common.Timeslot
-import org.powertac.common.MarketTransaction
-import org.powertac.common.enumerations.MarketTransactionType
-import javax.transaction.Transaction
+import grails.test.GrailsUnitTestCase
 import org.powertac.common.Orderbook
 
 class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
-/* TODO change code due to changed commmon plugin
-  def competition
+
+  Instant start
   def sampleTimeslot
   def sampleProduct
   def sampleSeller
   def sampleBuyer
-  ShoutDoCreateCmd sell1
-  ShoutDoCreateCmd buy1
   Shout buyShout
   Shout buyShout2
   Shout sellShout
 
   def auctionService
   def timeService
-  
+
   protected void setUp() {
     super.setUp()
-    timeService.currentTime = new Instant()
-    competition = new Competition(name: "sampleCompetition", enabled: true, current: true)
-    assert (competition.save())
-    sampleSeller = new Broker(userName: "SampleSeller")
+    start = new DateTime(2011, 1, 1, 12, 0, 0, 0, DateTimeZone.UTC).toInstant()
+    timeService.setCurrentTime(start)
+    sampleSeller = new Broker(username: "SampleSeller")
     assert (sampleSeller.save())
-    sampleBuyer = new Broker(userName: "SampleBuyer")
+    sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
     sampleProduct = new Product(productType: ProductType.Future)
     assert (sampleProduct.save())
     sampleTimeslot = new Timeslot(serialNumber: 1, enabled: true, startInstant: new Instant(), endInstant: new Instant())
     assert (sampleTimeslot.validate())
     assert (sampleTimeslot.save())
-    sell1 = new ShoutDoCreateCmd(broker: sampleSeller, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.SELL, orderType: OrderType.LIMIT)
-    buy1 = new ShoutDoCreateCmd(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY, orderType: OrderType.LIMIT)
 
-    buyShout = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY, orderType: OrderType.LIMIT, modReasonCode: ModReasonCode.INSERT, latest: true)
-    buyShout2 = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY, orderType: OrderType.LIMIT, modReasonCode: ModReasonCode.INSERT, latest: true)
-    sellShout = new Shout(broker: sampleSeller, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.SELL, orderType: OrderType.LIMIT, modReasonCode: ModReasonCode.INSERT, latest: true)
+    buyShout = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY)
+    buyShout2 = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY)
+    sellShout = new Shout(broker: sampleSeller, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.SELL)
   }
 
   protected void tearDown() {
     super.tearDown()
   }
 
-  void testIncomingSellShoutDoCreateCmd() {
-    sell1.limitPrice = 10.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
+  void testIncomingSellShout() {
+    sellShout.limitPrice = 10.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
 
     assertEquals(1, Shout.list().size())
     Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
       eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
+      eq('quantity', 20.0)
     }
     assertNotNull s1
     assertEquals(ModReasonCode.INSERT, s1.modReasonCode)
     assertNotNull s1.id
     assertNotNull s1.transactionId
-
   }
 
-  void testIncomingBuyShoutDoCreateCmd() {
-    buy1.limitPrice = 12.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+  void testIncomingBuyShout() {
+    buyShout.limitPrice = 10.0
+    buyShout.quantity = 20.0
+    auctionService.processShout(buyShout)
 
     assertEquals(1, Shout.list().size())
-    Shout b1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 12.0)
-      eq('quantity', 10.0)
+    Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 10.0)
+      eq('quantity', 20.0)
     }
-    assertNotNull b1
-    assertEquals(ModReasonCode.INSERT, b1.modReasonCode)
-    assertNotNull b1.id
-    assertNotNull b1.transactionId
-
+    assertNotNull s1
+    assertEquals(ModReasonCode.INSERT, s1.modReasonCode)
+    assertNotNull s1.id
+    assertNotNull s1.transactionId
   }
 
   void testIncomingBuyAndSellShoutDoCreateCmd() {
-    sell1.limitPrice = 10.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
+    sellShout.limitPrice = 10.0
+    sellShout.quantity = 10.0
+    auctionService.processShout(sellShout)
 
-    buy1.limitPrice = 12.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+    buyShout.limitPrice = 12.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
     assertEquals(2, Shout.list().size())
 
@@ -122,173 +112,19 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull b1.transactionId
   }
 
-
-  void testDeletionOfShout() {
-    //init
-    sell1.limitPrice = 10.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    assertEquals(1, Shout.list().size())
-    Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-    }
-    assertNotNull s1
-
-    //action
-    def delSell1 = new ShoutDoDeleteCmd(broker: sampleSeller, shoutId: s1.id)
-    auctionService.processShoutDelete(delSell1)
-
-    //validate
-    assertEquals(1, Shout.list().size())
-
-    //Shout oldS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-    //  eq('limitPrice', 10.0)
-    //  eq('quantity', 10.0)
-    //  eq('modReasonCode', ModReasonCode.INSERT)
-    //}
-    //assertNotNull oldS1
-    //assertEquals(s1.shoutId, oldS1.shoutId)
-
-    Shout delS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.DELETIONBYUSER)
-      //eq('latest', false)
-    }
-    assertNotNull delS1
-    //assertEquals(s1.shoutId, delS1.shoutId)
-    assertNotNull delS1.transactionId
-    //assertNotSame(oldS1.transactionId, delS1.transactionId)
-  }
-
-  void testUpdateOfShout() {
-    //init
-    sell1.limitPrice = 10.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    assertEquals(1, Shout.list().size())
-    Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-    }
-    assertNotNull s1
-
-    //action
-    def updateSell1 = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: s1.id, quantity: 20.0, limitPrice: 9.0)
-    auctionService.processShoutUpdate(updateSell1)
-
-    //validate
-    assertEquals(3, Shout.list().size())
-
-    Shout oldInsertedS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.INSERT)
-      //eq('latest', false)
-    }
-    assertNotNull oldInsertedS1
-    assertEquals(s1.shoutId, oldInsertedS1.shoutId)
-
-    Shout oldDeletedS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 10.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.DELETIONBYUSER)
-      //eq('latest', false)
-    }
-    assertNotNull oldDeletedS1
-    assertEquals(s1.shoutId, oldDeletedS1.shoutId)
-    assertNotSame(oldInsertedS1.transactionId, oldDeletedS1.transactionId)
-
-    Shout updatedS1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 9.0)
-      eq('quantity', 20.0)
-      //eq('latest', true)
-    }
-    assertNotNull updatedS1
-    assertEquals(ModReasonCode.MODIFICATION, updatedS1.modReasonCode)
-    assertEquals(s1.shoutId, updatedS1.shoutId)
-    assertNotNull updatedS1.transactionId
-    assertNotSame(oldInsertedS1.transactionId, updatedS1.transactionId)
-    assertNotSame(oldDeletedS1.transactionId, updatedS1.transactionId)
-
-  }
-
-  void testSettlementForBuyShout() {
-    buyShout.executionQuantity = 100
-    buyShout.executionPrice = 10
-
-    def cashUpdate = auctionService.settleCashUpdate(buyShout)
-
-    assert (cashUpdate instanceof CashDoUpdateCmd)
-    assertEquals(sampleBuyer, cashUpdate.broker)
-    assertEquals(buyShout.executionQuantity * buyShout.executionPrice, cashUpdate.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", cashUpdate.origin)
-
-    def posUpdate = auctionService.settlePositionUpdate(buyShout)
-    assert (posUpdate instanceof PositionDoUpdateCmd)
-    assertEquals(sampleBuyer, posUpdate.broker)
-    assertEquals(buyShout.executionQuantity, posUpdate.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", posUpdate.origin)
-  }
-
-  void testSettlementForSellShout() {
-    sellShout.executionQuantity = 100
-    sellShout.executionPrice = 10
-
-    def cashUpdate = auctionService.settleCashUpdate(sellShout)
-
-    assert (cashUpdate instanceof CashDoUpdateCmd)
-    assertEquals(sampleSeller, cashUpdate.broker)
-    assertEquals(sellShout.executionQuantity * sellShout.executionPrice, cashUpdate.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", cashUpdate.origin)
-
-    def posUpdate = auctionService.settlePositionUpdate(sellShout)
-    assert (posUpdate instanceof PositionDoUpdateCmd)
-    assertEquals(sampleSeller, posUpdate.broker)
-    assertEquals(sellShout.executionQuantity, posUpdate.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", posUpdate.origin)
-  }
-
-  void testTradeLog() {
-    //init
-    Map stat = ['executableVolume': 100.0, 'price': 15.0, 'product': sampleProduct, 'timeslot': sampleTimeslot, 'transactionId': "123abc"]
-    MarketTransaction returnedTl = auctionService.writeTradeLog(stat)
-
-    //validate
-    assertEquals(1, MarketTransaction.list().size())
-    MarketTransaction persistedTl = MarketTransaction.list().first()
-    assert persistedTl.latest
-    assertEquals(MarketTransactionType.TRADE, persistedTl.transactionType)
-    assertEquals(stat.price, persistedTl.price)
-    assertEquals(stat.executableVolume, persistedTl.quantity)
-    assertEquals(sampleProduct, persistedTl.product)
-    assertEquals(stat.transactionId, persistedTl.transactionId)
-
-    assert returnedTl.latest
-    assertEquals(MarketTransactionType.TRADE, returnedTl.transactionType)
-    assertEquals(stat.price, returnedTl.price)
-    assertEquals(stat.executableVolume, returnedTl.quantity)
-    assertEquals(sampleProduct, returnedTl.product)
-    assertEquals(stat.transactionId, returnedTl.transactionId)
-  }
-
-  void testSimpleUpdateOfEmptyOrderbook() {
-    //init
+  void testSimpleAskAndBidEntryInEmptyOrderbook() {
+    /** init              */
     buyShout.quantity = 50
     buyShout.limitPrice = 11
-    buyShout.shoutId = "111"
     buyShout.transactionId = "tbd"
-    buyShout.save()
+    assert buyShout.save()
+
     auctionService.updateOrderbook(buyShout)
 
     sellShout.quantity = 20
     sellShout.limitPrice = 13
-    sellShout.shoutId = "112"
     sellShout.transactionId = "tbd2"
-    sellShout.save()
+    assert sellShout.save()
 
     //action
     Orderbook ob = auctionService.updateOrderbook(sellShout)
@@ -306,32 +142,26 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
-  /*
-   * Incoming shout (bid) adds quantity to existing price level
-   */
-
+  /** Incoming shout (bid) adds quantity to existing price level              */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
     buyShout.limitPrice = 11
-    buyShout.shoutId = "111"
     buyShout.transactionId = "tbd"
-    buyShout.save()
+    assert buyShout.save()
     auctionService.updateOrderbook(buyShout)
 
     sellShout.quantity = 20
     sellShout.limitPrice = 13
-    sellShout.shoutId = "112"
     sellShout.transactionId = "tbd2"
-    sellShout.save()
+    assert sellShout.save()
     auctionService.updateOrderbook(sellShout)
 
     //action
     buyShout2.quantity = 15
     buyShout2.limitPrice = 11
-    buyShout2.shoutId = "113"
     buyShout2.transactionId = "tbd3"
-    buyShout2.save()
+    assert buyShout2.save()
     Orderbook ob = auctionService.updateOrderbook(buyShout2)
 
     //validate
@@ -348,227 +178,97 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
-  void testInitialQuoteUpdateWithBidOnly() {
-    //init
-    Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20)
-
-    //action
-    MarketTransaction tl = auctionService.updateQuote(orderbook)
-
-    //validate
-    assertNotNull(tl)
-    assertEquals(orderbook.bid0, tl.bid)
-    assertEquals(orderbook.bidSize0, tl.bidSize)
-    assertNull(tl.ask)
-    assertNull(tl.askSize)
-    assertEquals(orderbook.timeslot, tl.timeslot)
-    assertEquals(orderbook.product, tl.product)
-    assertEquals(orderbook.transactionId, tl.transactionId)
-    //assert (tl.latest)
-  }
-
-  void testInitialQuoteUpdateWithAskOnly() {
-    //init
-    Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, ask0: 10.0, askSize0: 20)
-
-    //action
-    MarketTransaction tl = auctionService.updateQuote(orderbook)
-
-    //validate
-    assertNotNull(tl)
-    assertEquals(orderbook.ask0, tl.ask)
-    assertEquals(orderbook.askSize0, tl.askSize)
-    assertNull(tl.bid)
-    assertNull(tl.bidSize)
-    assertEquals(orderbook.timeslot, tl.timeslot)
-    assertEquals(orderbook.product, tl.product)
-    assertEquals(orderbook.transactionId, tl.transactionId)
-    //assert (tl.latest)
-  }
-
-  void testInitialQuoteUpdateWithBidAndAsk() {
-    //init
-    Orderbook orderbook = new Orderbook(product: sampleProduct, timeslot: sampleTimeslot, transactionId: "123", latest: true, bid0: 10.0, bidSize0: 20, ask0: 13, askSize0: 10)
-
-    //action
-    MarketTransaction tl = auctionService.updateQuote(orderbook)
-
-    //validate
-    assertNotNull(tl)
-    assertEquals(orderbook.bid0, tl.bid)
-    assertEquals(orderbook.bidSize0, tl.bidSize)
-    assertEquals(orderbook.ask0, tl.ask)
-    assertEquals(orderbook.askSize0, tl.askSize)
-    assertEquals(orderbook.timeslot, tl.timeslot)
-    assertEquals(orderbook.product, tl.product)
-    assertEquals(orderbook.transactionId, tl.transactionId)
-    //assert (tl.latest)
-  }
-
-  void testQuoteAndOrderbookUpdateAfterIncomingShoutDoCreateCommandSequence() {
+  void testProcessOfIncomingShoutSequenceConcerningOrderbookUpdateAndShoutPersistence() {
     //init + action
-    sell1.limitPrice = 13.0
-    sell1.quantity = 10.0
-    List output = auctionService.processShoutCreate(sell1)
-    assertNotNull(output)
-    MarketTransaction firstTl = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook firstOb = output.findAll {it instanceof Orderbook}.first()
+    sellShout.limitPrice = 13.0
+    sellShout.quantity = 10.0
+    auctionService.processShout(sellShout)
 
-    buy1.limitPrice = 10.0
-    buy1.quantity = 10.0
-    output = auctionService.processShoutCreate(buy1)
-    assertNotNull(output)
-    MarketTransaction secondTl = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook secondOb = output.findAll {it instanceof Orderbook}.first()
+    Orderbook firstPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
-    sell1.limitPrice = 12.0
-    sell1.quantity = 20
-    output = auctionService.processShoutCreate(sell1)
-    assertNotNull(output)
-    MarketTransaction thirdTl = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook thirdOb = output.findAll {it instanceof Orderbook}.first()
+    buyShout.limitPrice = 10.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
-    buy1.limitPrice = 10.0
-    buy1.quantity = 30.0
-    output = auctionService.processShoutCreate(buy1)
-    assertNotNull(output)
-    MarketTransaction fourthTl = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook fourthOb = output.findAll {it instanceof Orderbook}.first()
+    Orderbook secondPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+
+    Shout sellShout2 = new Shout(sellShout.properties)
+    sellShout2.limitPrice = 12.0
+    sellShout2.quantity = 20
+    auctionService.processShout(sellShout2)
+
+    Orderbook thirdPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+
+    Shout buyShout2 = new Shout(buyShout.properties)
+    buyShout2.limitPrice = 10.0
+    buyShout2.quantity = 30.0
+    auctionService.processShout(buyShout2)
+
+    Orderbook fourthPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
     //validate
-    assertNotNull(firstTl)
-    assertEquals(13.0, firstTl.ask)
-    assertEquals(10.0, firstTl.askSize)
-    assertNull(firstTl.bid)
-    assertNull(firstTl.bidSize)
+    assertEquals(4, Shout.list().size())
+    List persistedShouts = []
 
-    assertNotNull(firstOb)
-    assertEquals(13.0, firstOb.ask0)
-    assertEquals(10.0, firstOb.askSize0)
-    assertNull(firstOb.bid0)
-    assertEquals(0.0, firstOb.bidSize0)
-    assertNull(firstOb.bid1)
-    assertEquals(0.0, firstOb.bidSize1)
-    assertNull(firstOb.ask1)
-    assertEquals(0.0, firstOb.askSize1)
-
-    assertNotNull(secondTl)
-    assertEquals(13.0, secondTl.ask)
-    assertEquals(10.0, secondTl.askSize)
-    assertEquals(10.0, secondTl.bid)
-    assertEquals(10.0, secondTl.bidSize)
-
-    assertNotNull(secondOb)
-    assertEquals(13.0, secondOb.ask0)
-    assertEquals(10.0, secondOb.askSize0)
-    assertEquals(10.0, secondOb.bid0)
-    assertEquals(10.0, secondOb.bidSize0)
-    assertNull(secondOb.bid1)
-    assertEquals(0.0, secondOb.bidSize1)
-    assertNull(secondOb.ask1)
-    assertEquals(0.0, secondOb.askSize1)
-
-    assertNotNull(thirdTl)
-    assertEquals(12.0, thirdTl.ask)
-    assertEquals(20.0, thirdTl.askSize)
-    assertEquals(10.0, thirdTl.bid)
-    assertEquals(10.0, thirdTl.bidSize)
-
-    assertNotNull(thirdOb)
-    assertEquals(12.0, thirdOb.ask0)
-    assertEquals(20.0, thirdOb.askSize0)
-    assertEquals(10.0, thirdOb.bid0)
-    assertEquals(10.0, thirdOb.bidSize0)
-    assertNull(thirdOb.bid1)
-    assertEquals(0.0, thirdOb.bidSize1)
-    assertEquals(13.0, thirdOb.ask1)
-    assertEquals(10.0, thirdOb.askSize1)
-
-    assertNotNull(fourthTl)
-    assertEquals(12.0, fourthTl.ask)
-    assertEquals(20.0, fourthTl.askSize)
-    assertEquals(10.0, fourthTl.bid)
-    assertEquals(40.0, fourthTl.bidSize)
-
-    assertNotNull(fourthOb)
-    assertEquals(12.0, fourthOb.ask0)
-    assertEquals(20.0, fourthOb.askSize0)
-    assertEquals(10.0, fourthOb.bid0)
-    assertEquals(40.0, fourthOb.bidSize0)
-    assertNull(fourthOb.bid1)
-    assertEquals(0.0, fourthOb.bidSize1)
-    assertEquals(13.0, fourthOb.ask1)
-    assertEquals(10.0, fourthOb.askSize1)
-
-
-    MarketTransaction firstPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 13.0)
-      eq('askSize', 10.0)
-      isNull('bid')
-      isNull('bidSize')
+    Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 13.0)
+      eq('quantity', 10.0)
     }
+    assertNotNull s1
+    persistedShouts << s1
 
-    assertNotNull(firstPersistedTl)
-    assertFalse(firstPersistedTl.latest)
+    Shout s2 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 10.0)
+      eq('quantity', 10.0)
+    }
+    assertNotNull s2
+    persistedShouts << s2
 
-    Orderbook firstPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 13.0)
-      eq('askSize0', 10.0)
-      isNull('bid0')
-      eq('bidSize0', 0.0)
+    Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 12.0)
+      eq('quantity', 20.0)
+    }
+    assertNotNull s3
+    persistedShouts << s3
+
+    Shout s4 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 10.0)
+      eq('quantity', 30.0)
+    }
+    assertNotNull s4
+    persistedShouts << s4
+
+    persistedShouts.each {shout ->
+      assertEquals(ModReasonCode.INSERT, shout.modReasonCode)
+      assertNotNull shout.transactionId
     }
 
     assertNotNull(firstPersistedOb)
-    assertFalse(firstPersistedOb.latest)
+    assertEquals(13.0, firstPersistedOb.ask0)
+    assertEquals(10.0, firstPersistedOb.askSize0)
+    assertNull(firstPersistedOb.bid0)
+    assertEquals(0.0, firstPersistedOb.bidSize0)
     assertNull(firstPersistedOb.bid1)
     assertEquals(0.0, firstPersistedOb.bidSize1)
     assertNull(firstPersistedOb.ask1)
     assertEquals(0.0, firstPersistedOb.askSize1)
 
-
-    MarketTransaction secondPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 13.0)
-      eq('askSize', 10.0)
-      eq('bid', 10.0)
-      eq('bidSize', 10.0)
-    }
-
-    assertNotNull(secondPersistedTl)
-    assertFalse(secondPersistedTl.latest)
-
-    Orderbook secondPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 13.0)
-      eq('askSize0', 10.0)
-      eq('bid0', 10.0)
-      eq('bidSize0', 10.0)
-    }
-
     assertNotNull(secondPersistedOb)
-    assertFalse(secondPersistedOb.latest)
+    assertEquals(13.0, secondPersistedOb.ask0)
+    assertEquals(10.0, secondPersistedOb.askSize0)
+    assertEquals(10.0, secondPersistedOb.bid0)
+    assertEquals(10.0, secondPersistedOb.bidSize0)
+    assertNotNull(secondPersistedOb)
     assertNull(secondPersistedOb.bid1)
     assertEquals(0.0, secondPersistedOb.bidSize1)
     assertNull(secondPersistedOb.ask1)
     assertEquals(0.0, secondPersistedOb.askSize1)
 
-    MarketTransaction thirdPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 12.0)
-      eq('askSize', 20.0)
-      eq('bid', 10.0)
-      eq('bidSize', 10.0)
-    }
-
-    assertNotNull(thirdPersistedTl)
-    assertFalse(thirdPersistedTl.latest)
-
-    Orderbook thirdPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 12.0)
-      eq('askSize0', 20.0)
-      eq('bid0', 10.0)
-      eq('bidSize0', 10.0)
-    }
-
     assertNotNull(thirdPersistedOb)
-    assertFalse(thirdPersistedOb.latest)
+    assertEquals(12.0, thirdPersistedOb.ask0)
+    assertEquals(20.0, thirdPersistedOb.askSize0)
+    assertEquals(10.0, thirdPersistedOb.bid0)
+    assertEquals(10.0, thirdPersistedOb.bidSize0)
     assertNull(thirdPersistedOb.bid1)
     assertEquals(0.0, thirdPersistedOb.bidSize1)
     assertEquals(13.0, thirdPersistedOb.ask1)
@@ -576,25 +276,11 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(thirdPersistedOb.ask2)
     assertEquals(0.0, thirdPersistedOb.askSize2)
 
-    MarketTransaction fourthPersistedTl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 12.0)
-      eq('askSize', 20.0)
-      eq('bid', 10.0)
-      eq('bidSize', 40.0)
-    }
-
-    assertNotNull(fourthPersistedTl)
-    assert (fourthPersistedTl.latest)
-
-    Orderbook fourthPersistedOb = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 12.0)
-      eq('askSize0', 20.0)
-      eq('bid0', 10.0)
-      eq('bidSize0', 40.0)
-    }
-
     assertNotNull(fourthPersistedOb)
-    assert (fourthPersistedOb.latest)
+    assertEquals(12.0, fourthPersistedOb.ask0)
+    assertEquals(20.0, fourthPersistedOb.askSize0)
+    assertEquals(10.0, fourthPersistedOb.bid0)
+    assertEquals(40.0, fourthPersistedOb.bidSize0)
     assertNull(fourthPersistedOb.bid1)
     assertEquals(0.0, fourthPersistedOb.bidSize1)
     assertEquals(13.0, fourthPersistedOb.ask1)
@@ -602,596 +288,164 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNull(thirdPersistedOb.ask2)
     assertEquals(0.0, thirdPersistedOb.askSize2)
   }
-/*b TODO change code to due common plugin
-  void testQuoteAndOrderbookUpdateAfterShoutDeletion() {
-    //init
-    sell1.limitPrice = 15.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    def shoutId = Shout.findByLatest(true).shoutId
-    ShoutDoDeleteCmd myShoutDoDeleteCmd = new ShoutDoDeleteCmd(broker: sampleSeller, shoutId: shoutId)
-
-    //action
-    List output = auctionService.processShoutDelete(myShoutDoDeleteCmd)
-    assertNotNull(output)
-    MarketTransaction tlAfterDelete = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook obAfterDelete = output.findAll {it instanceof Orderbook}.first()
-
-    //validate
-    assertNotNull(tlAfterDelete)
-    assertNull(tlAfterDelete.bid)
-    assertNull(tlAfterDelete.bidSize)
-    assertNull(tlAfterDelete.ask)
-    assertNull(tlAfterDelete.askSize)
-    assert (tlAfterDelete.latest)
-
-    assertNotNull(obAfterDelete)
-    assertNull(obAfterDelete.bid0)
-    assertEquals(0.0, obAfterDelete.bidSize0)
-    assertNull(obAfterDelete.ask0)
-    assertEquals(0.0, obAfterDelete.askSize0)
-    assert (obAfterDelete.latest)
-
-    MarketTransaction persistedTlBeforeDelete = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 15.0)
-      eq('askSize', 10.0)
-      eq('latest', false)
-    }
-    assertNotNull(persistedTlBeforeDelete)
-    assertNull(persistedTlBeforeDelete.bid)
-    assertNull(persistedTlBeforeDelete.bidSize)
-
-    Orderbook persistedObBeforeDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 15.0)
-      eq('askSize0', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedObBeforeDelete)
-    assertNull(persistedObBeforeDelete.bid0)
-    assertEquals(0.0, persistedObBeforeDelete.bidSize0)
-
-    MarketTransaction persistedTlAferDelete = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      isNull('ask')
-      isNull('askSize')
-      //eq('latest', true)
-    }
-    assertNotNull(persistedTlAferDelete)
-    assertNull(persistedTlAferDelete.bid)
-    assertNull(persistedTlAferDelete.bidSize)
-
-    Orderbook persistedObAfterDelete = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      isNull('ask0')
-      eq('askSize0', 0.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedObAfterDelete)
-    assertNull(persistedObAfterDelete.bid0)
-    assertEquals(0.0, persistedObAfterDelete.bidSize0)
-
-  }
-
-  void testQuoteAndOrderbookUpdateAfterShoutQuantityUpdate() {
-
-    //init
-    sell1.limitPrice = 15.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    def shoutId = Shout.findByLatest(true).shoutId
-    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: shoutId)
-    shoutUpdate.quantity = 20.0
-
-    //action
-    List output = auctionService.processShoutUpdate(shoutUpdate)
-
-    //validate
-
-    assertNotNull(output)
-    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
-
-    assertNotNull(tlAfterUpdate)
-    assertNull(tlAfterUpdate.bid)
-    assertNull(tlAfterUpdate.bidSize)
-    assertEquals(15.0, tlAfterUpdate.ask)
-    assertEquals(20.0, tlAfterUpdate.askSize)
-    assert (tlAfterUpdate.latest)
-
-    assertNotNull(obAfterUpdate)
-    assertNull(obAfterUpdate.bid0)
-    assertEquals(0.0, obAfterUpdate.bidSize0)
-    assertEquals(15.0, obAfterUpdate.ask0)
-    assertEquals(20.0, obAfterUpdate.askSize0)
-    assert (obAfterUpdate.latest)
-
-    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 15.0)
-      eq('askSize', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedTlBeforeUpdate)
-    assertNull(persistedTlBeforeUpdate.bid)
-    assertNull(persistedTlBeforeUpdate.bidSize)
-
-    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 15.0)
-      eq('askSize0', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedObBeforeUpdate)
-    assertNull(persistedObBeforeUpdate.bid0)
-    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
-
-    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 15.0)
-      eq('askSize', 20.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedTlAfterUpdate)
-    assertNull(persistedTlAfterUpdate.bid)
-    assertNull(persistedTlAfterUpdate.bidSize)
-
-    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 15.0)
-      eq('askSize0', 20.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedObAfterUpdate)
-    assertNull(persistedObAfterUpdate.bid0)
-    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
-
-  }
-
-  void testQuoteAndOrderbookUpdateAfterShoutLimitPriceUpdate() {
-
-    //init
-    sell1.limitPrice = 15.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    def shoutId = Shout.findByLatest(true).shoutId
-    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: shoutId)
-    shoutUpdate.limitPrice = 10.0
-
-    //action
-    List output = auctionService.processShoutUpdate(shoutUpdate)
-
-    //validate
-
-    assertNotNull(output)
-    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
-
-    assertNotNull(tlAfterUpdate)
-    assertNull(tlAfterUpdate.bid)
-    assertNull(tlAfterUpdate.bidSize)
-    assertEquals(10.0, tlAfterUpdate.ask)
-    assertEquals(10.0, tlAfterUpdate.askSize)
-    assert (tlAfterUpdate.latest)
-
-    assertNotNull(obAfterUpdate)
-    assertNull(obAfterUpdate.bid0)
-    assertEquals(0.0, obAfterUpdate.bidSize0)
-    assertEquals(10.0, obAfterUpdate.ask0)
-    assertEquals(10.0, obAfterUpdate.askSize0)
-    assert (obAfterUpdate.latest)
-
-    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 15.0)
-      eq('askSize', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedTlBeforeUpdate)
-    assertNull(persistedTlBeforeUpdate.bid)
-    assertNull(persistedTlBeforeUpdate.bidSize)
-
-    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 15.0)
-      eq('askSize0', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedObBeforeUpdate)
-    assertNull(persistedObBeforeUpdate.bid0)
-    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
-
-    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 10.0)
-      eq('askSize', 10.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedTlAfterUpdate)
-    assertNull(persistedTlAfterUpdate.bid)
-    assertNull(persistedTlAfterUpdate.bidSize)
-
-    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 10.0)
-      eq('askSize0', 10.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedObAfterUpdate)
-    assertNull(persistedObAfterUpdate.bid0)
-    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
-
-  }
-
-  void testQuoteAndOrderbookUpdateAfterShoutQuantityAndLimitPriceUpdate() {
-
-    //init
-    sell1.limitPrice = 15.0
-    sell1.quantity = 10.0
-    auctionService.processShoutCreate(sell1)
-
-    def shoutId = Shout.findByLatest(true).shoutId
-    ShoutDoUpdateCmd shoutUpdate = new ShoutDoUpdateCmd(broker: sampleSeller, shoutId: shoutId)
-    shoutUpdate.limitPrice = 10.0
-    shoutUpdate.quantity = 20.0
-
-    //action
-    List output = auctionService.processShoutUpdate(shoutUpdate)
-
-    //validate
-
-    assertNotNull(output)
-    MarketTransaction tlAfterUpdate = output.findAll {it instanceof MarketTransaction}.first()
-    Orderbook obAfterUpdate = output.findAll {it instanceof Orderbook}.first()
-
-    assertNotNull(tlAfterUpdate)
-    assertNull(tlAfterUpdate.bid)
-    assertNull(tlAfterUpdate.bidSize)
-    assertEquals(10.0, tlAfterUpdate.ask)
-    assertEquals(20.0, tlAfterUpdate.askSize)
-    //assert (tlAfterUpdate.latest)
-
-    assertNotNull(obAfterUpdate)
-    assertNull(obAfterUpdate.bid0)
-    assertEquals(0.0, obAfterUpdate.bidSize0)
-    assertEquals(10.0, obAfterUpdate.ask0)
-    assertEquals(20.0, obAfterUpdate.askSize0)
-    //assert (obAfterUpdate.latest)
-
-    MarketTransaction persistedTlBeforeUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 15.0)
-      eq('askSize', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedTlBeforeUpdate)
-    assertNull(persistedTlBeforeUpdate.bid)
-    assertNull(persistedTlBeforeUpdate.bidSize)
-
-    Orderbook persistedObBeforeUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 15.0)
-      eq('askSize0', 10.0)
-      //eq('latest', false)
-    }
-    assertNotNull(persistedObBeforeUpdate)
-    assertNull(persistedObBeforeUpdate.bid0)
-    assertEquals(0.0, persistedObBeforeUpdate.bidSize0)
-
-    MarketTransaction persistedTlAfterUpdate = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
-      eq('ask', 10.0)
-      eq('askSize', 20.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedTlAfterUpdate)
-    assertNull(persistedTlAfterUpdate.bid)
-    assertNull(persistedTlAfterUpdate.bidSize)
-
-    Orderbook persistedObAfterUpdate = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
-      eq('ask0', 10.0)
-      eq('askSize0', 20.0)
-      //eq('latest', true)
-    }
-    assertNotNull(persistedObAfterUpdate)
-    assertNull(persistedObAfterUpdate.bid0)
-    assertEquals(0.0, persistedObAfterUpdate.bidSize0)
-
-  }
 
 
-  void testCompleteAllocationOfSingleBuyShout() {
+  def testCompleteAllocationOfSingleBuyShout = {->
     //init
     buyShout.quantity = 50
     buyShout.limitPrice = 11
-    buyShout.shoutId = "111"
     buyShout.transactionId = "tbd"
-    buyShout.save()
+    assert buyShout.save()
 
-    Map stat = [:]
-    stat.price = 10
-    stat.executableVolume = 200
-    stat.transactionId = "123"
     BigDecimal aggregQuantityAllocated = 100
+    Turnover turnover = new Turnover(price: 10, executableVolume: 200)
+    String transactionId = "123"
 
     //action
-    List results = auctionService.allocateSingleShout(buyShout, aggregQuantityAllocated, stat)
+    BigDecimal updatedAggregQuantityAllocated = auctionService.allocateSingleShout(buyShout, aggregQuantityAllocated, turnover, transactionId)
+
     //validate
-    assert (results[0] instanceof Shout)
-    Shout returnedShout = (Shout) results[0]
-    assertEquals(stat.price, returnedShout.executionPrice)
-    assertEquals(buyShout.quantity, returnedShout.executionQuantity)
-    assertEquals(ModReasonCode.EXECUTION, returnedShout.modReasonCode)
-    assertEquals(stat.transactionId, returnedShout.transactionId)
-    assertEquals("Matched by org.powertac.auctioneer.pda", returnedShout.comment)
+    assertEquals(aggregQuantityAllocated + buyShout.quantity, updatedAggregQuantityAllocated)
 
-    assert (results[1] instanceof BigDecimal)
-    assertEquals(aggregQuantityAllocated + buyShout.quantity, results[1])
+    assertEquals(1, Shout.list().size())
 
-    assertEquals(2, Shout.list().size())
+    Shout persistedShout = (Shout) Shout.findByModReasonCode(ModReasonCode.EXECUTION)
 
-    Shout persistedShout = (Shout) Shout.findByLatestAndShoutId(true, buyShout.shoutId)
-    assertEquals(stat.price, persistedShout.executionPrice)
+    assertEquals(turnover.price, persistedShout.executionPrice)
     assertEquals(buyShout.quantity, persistedShout.executionQuantity)
-    assertEquals(ModReasonCode.EXECUTION, persistedShout.modReasonCode)
-    assertEquals(stat.transactionId, persistedShout.transactionId)
-    assertEquals("Matched by org.powertac.auctioneer.pda", persistedShout.comment)
-  }
-
-  void testPartialAllocationOfSingleBuyShout() {
-    //init
-    buyShout.quantity = 100
-    buyShout.limitPrice = 11
-    buyShout.shoutId = "111"
-    buyShout.transactionId = "tbd"
-    buyShout.save()
-
-    Map stat = [:]
-    stat.price = 10
-    stat.executableVolume = 100
-    stat.transactionId = "123"
-    BigDecimal aggregQuantityAllocated = 50
-
-    //action
-    List results = auctionService.allocateSingleShout(buyShout, aggregQuantityAllocated, stat)
-    //validate
-    assert (results[0] instanceof Shout)
-    Shout returnedShout = (Shout) results[0]
-    assertEquals(stat.price, returnedShout.executionPrice)
-    assertEquals((stat.executableVolume - aggregQuantityAllocated), returnedShout.executionQuantity)
-    assertEquals(buyShout.quantity - (stat.executableVolume - aggregQuantityAllocated), returnedShout.quantity)
-    assertEquals(ModReasonCode.PARTIALEXECUTION, returnedShout.modReasonCode)
-    assertEquals(stat.transactionId, returnedShout.transactionId)
-    assertEquals("Matched by org.powertac.auctioneer.pda", returnedShout.comment)
-
-    assert (results[1] instanceof BigDecimal)
-    assertEquals(stat.executableVolume, results[1])
-
-    assertEquals(2, Shout.list().size())
-
-    Shout persistedShout = (Shout) Shout.findByLatestAndShoutId(true, buyShout.shoutId)
-    assertEquals(stat.price, persistedShout.executionPrice)
-    assertEquals((stat.executableVolume - aggregQuantityAllocated), persistedShout.executionQuantity)
-    assertEquals(buyShout.quantity - (stat.executableVolume - aggregQuantityAllocated), persistedShout.quantity)
-    assertEquals(ModReasonCode.PARTIALEXECUTION, persistedShout.modReasonCode)
-    assertEquals(stat.transactionId, persistedShout.transactionId)
+    assertEquals(transactionId, persistedShout.transactionId)
     assertEquals("Matched by org.powertac.auctioneer.pda", persistedShout.comment)
   }
 
   void testSimpleUniformPriceCalculation() {
     //init
-    sell1.limitPrice = 11.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
 
-    buy1.limitPrice = 11.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
     //action
     def shouts = Shout.list()
-    Map stat = auctionService.calcUniformPrice(shouts)
+    Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
-    assertEquals(11.0, stat.price)
-    assertEquals(10.0, stat.executableVolume)
-    assertEquals(20.0, stat.aggregatedQuantityAsk)
-    assertEquals(10.0, stat.aggregatedQuantityBid)
+    assertEquals(11.0, turnover.price)
+    assertEquals(10.0, turnover.getExecutableVolume())
+    assertEquals(20.0, turnover.aggregatedQuantityAsk)
+    assertEquals(10.0, turnover.aggregatedQuantityBid)
   }
 
   void testUniformPriceCalculationWithHigherMinimumAskQuantityAtLowestPrice() {
     //init
-    sell1.limitPrice = 11.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
 
-    sell1.limitPrice = 13.0
-    sell1.quantity = 50.0
-    auctionService.processShoutCreate(sell1)
+    Shout sellShout2 = new Shout(sellShout.properties)
+    sellShout2.limitPrice = 13.0
+    sellShout2.quantity = 10.0
+    auctionService.processShout(sellShout2)
 
-    buy1.limitPrice = 13.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+    buyShout.limitPrice = 13.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
-    buy1.limitPrice = 11.0
-    buy1.quantity = 70.0
-    auctionService.processShoutCreate(buy1)
+    Shout buyShout2 = new Shout(buyShout.properties)
+    buyShout2.limitPrice = 11.0
+    buyShout2.quantity = 70.0
+    auctionService.processShout(buyShout2)
 
     //action
     def shouts = Shout.list()
-    Map stat = auctionService.calcUniformPrice(shouts)
+    Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
-    assertEquals(11.0, stat.price)
-    assertEquals(20.0, stat.executableVolume)
-    assertEquals(20.0, stat.aggregatedQuantityAsk)
-    assertEquals(80.0, stat.aggregatedQuantityBid)
+    assertEquals(11.0, turnover.price)
+    assertEquals(20.0, turnover.executableVolume)
+    assertEquals(20.0, turnover.aggregatedQuantityAsk)
+    assertEquals(80.0, turnover.aggregatedQuantityBid)
   }
 
   void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMinimalSurplus() {
-    //init
-    sell1.limitPrice = 11.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
+     //init
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
 
-    sell1.limitPrice = 13.0
-    sell1.quantity = 50.0
-    auctionService.processShoutCreate(sell1)
+    Shout sellShout2 = new Shout(sellShout.properties)
+    sellShout2.limitPrice = 13.0
+    sellShout2.quantity = 10.0
+    auctionService.processShout(sellShout2)
 
-    buy1.limitPrice = 13.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+    buyShout.limitPrice = 13.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
-    buy1.limitPrice = 12.0
-    buy1.quantity = 30.0
-    auctionService.processShoutCreate(buy1)
+    Shout buyShout2 = new Shout(buyShout.properties)
+    buyShout2.limitPrice = 12.0
+    buyShout2.quantity = 30.0
+    auctionService.processShout(buyShout2)
 
-    buy1.limitPrice = 11.0
-    buy1.quantity = 40.0
-    auctionService.processShoutCreate(buy1)
+    Shout buyShout3 = new Shout(buyShout.properties)
+    buyShout3.limitPrice = 11.0
+    buyShout3.quantity = 40.0
+    auctionService.processShout(buyShout3)
 
     //action
     def shouts = Shout.list()
-    Map stat = auctionService.calcUniformPrice(shouts)
+    Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
-    assertEquals(12.0, stat.price)
-    assertEquals(20.0, stat.executableVolume)
-    assertEquals(20.0, stat.aggregatedQuantityAsk)
-    assertEquals(40.0, stat.aggregatedQuantityBid)
+    assertEquals(12.0, turnover.price)
+    assertEquals(20.0, turnover.executableVolume)
+    assertEquals(20.0, turnover.aggregatedQuantityAsk)
+    assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
-
 
   void testUniformPriceCalculationWithHighestMinimumBidQuantityAtMiddlePrice() {
     //init
-    sell1.limitPrice = 11.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
 
-    sell1.limitPrice = 12.0
-    sell1.quantity = 30.0
-    auctionService.processShoutCreate(sell1)
+    Shout sellShout2 = new Shout(sellShout.properties)
+    sellShout2.limitPrice = 12.0
+    sellShout2.quantity = 30.0
+    auctionService.processShout(sellShout2)
 
-    sell1.limitPrice = 13.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
+    Shout sellShout3 = new Shout(sellShout.properties)
+    sellShout3.limitPrice = 13.0
+    sellShout3.quantity = 20.0
+    auctionService.processShout(sellShout3)
 
-    buy1.limitPrice = 13.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
+    buyShout.limitPrice = 13.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
 
-    buy1.limitPrice = 12.0
-    buy1.quantity = 30.0
-    auctionService.processShoutCreate(buy1)
+    Shout buyShout2 = new Shout(buyShout.properties)
+    buyShout2.limitPrice = 12.0
+    buyShout2.quantity = 30.0
+    auctionService.processShout(buyShout2)
 
-    buy1.limitPrice = 11.0
-    buy1.quantity = 40.0
-    auctionService.processShoutCreate(buy1)
+    Shout buyShout3 = new Shout(buyShout.properties)
+    buyShout3.limitPrice = 11.0
+    buyShout3.quantity = 40.0
+    auctionService.processShout(buyShout3)
+
 
     //action
     def shouts = Shout.list()
-    Map stat = auctionService.calcUniformPrice(shouts)
+    Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
-    assertEquals(12.0, stat.price)
-    assertEquals(40.0, stat.executableVolume)
-    assertEquals(50.0, stat.aggregatedQuantityAsk)
-    assertEquals(40.0, stat.aggregatedQuantityBid)
+    assertEquals(12.0, turnover.price)
+    assertEquals(40.0, turnover.executableVolume)
+    assertEquals(50.0, turnover.aggregatedQuantityAsk)
+    assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
 
 
-  void testSimpleMarketClearing() {
-    //init
-    sell1.limitPrice = 11.0
-    sell1.quantity = 20.0
-    auctionService.processShoutCreate(sell1)
-
-    buy1.limitPrice = 11.0
-    buy1.quantity = 10.0
-    auctionService.processShoutCreate(buy1)
-
-    assertEquals(2, Shout.list().size())
-    //action
-    List results = auctionService.clearMarket()
-
-    // Validate persisted obejcts
-    assertEquals(4, Shout.list().size())
-
-    Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 11.0)
-      eq('quantity', 20.0)
-      eq('modReasonCode', ModReasonCode.INSERT)
-    }
-    assertNotNull(s1)
-    //assertFalse(s1.latest)
-    assertEquals(BuySellIndicator.SELL, s1.buySellIndicator)
-
-    Shout s2 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 11.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.INSERT)
-    }
-    assertNotNull(s2)
-    //assertFalse(s2.latest)
-    assertEquals(BuySellIndicator.BUY, s2.buySellIndicator)
-
-    Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 11.0)
-      eq('quantity', 10.0)
-      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
-    }
-    assertNotNull(s3)
-    //assert (s3.latest)
-    assertEquals(BuySellIndicator.SELL, s3.buySellIndicator)
-    assertEquals(10.0, s3.executionQuantity)
-    assertEquals(11.0, s3.executionPrice)
-
-    Shout s4 = (Shout) Shout.withCriteria(uniqueResult: true) {
-      eq('limitPrice', 11.0)
-      eq('quantity', 0.0)
-      eq('modReasonCode', ModReasonCode.EXECUTION)
-    }
-    assertNotNull(s4)
-    //assert (s4.latest)
-    assertEquals(BuySellIndicator.BUY, s4.buySellIndicator)
-    assertEquals(10.0, s4.executionQuantity)
-    assertEquals(11.0, s4.executionPrice)
-
-    // Validate returned list
-
-    CashDoUpdateCmd cashUpdateBuyer = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange < 0}.first()
-    assertEquals(sampleBuyer, cashUpdateBuyer.broker)
-    assertEquals(-110, cashUpdateBuyer.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", cashUpdateBuyer.origin)
-
-    PositionDoUpdateCmd posUpdateBuyer = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange > 0}.first()
-    assert (posUpdateBuyer instanceof PositionDoUpdateCmd)
-    assertEquals(sampleBuyer, posUpdateBuyer.broker)
-    assertEquals(10, posUpdateBuyer.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", posUpdateBuyer.origin)
-
-    CashDoUpdateCmd cashUpdateSeller = results.findAll {it instanceof CashDoUpdateCmd && it.relativeChange > 0}.first()
-    assertEquals(sampleSeller, cashUpdateSeller.broker)
-    assertEquals(+110, cashUpdateSeller.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", cashUpdateSeller.origin)
-
-    PositionDoUpdateCmd posUpdateSeller = results.findAll {it instanceof PositionDoUpdateCmd && it.relativeChange < 0}.first()
-    assertEquals(sampleSeller, posUpdateSeller.broker)
-    assertEquals(-10, posUpdateSeller.relativeChange)
-    assertEquals("org.powertac.auctioneer.pda", posUpdateSeller.origin)
-
-    assertEquals(2, results.findAll {it instanceof Shout}.size())
-
-    Shout updatedSell = results.findAll {it instanceof Shout && it.buySellIndicator == BuySellIndicator.SELL}.first()
-    assertEquals(11.0, updatedSell.limitPrice)
-    assertEquals(10.0, updatedSell.quantity)
-    assertEquals(11.0, updatedSell.executionPrice)
-    assertEquals(10.0, updatedSell.executionQuantity)
-    assertEquals(ModReasonCode.PARTIALEXECUTION, updatedSell.modReasonCode)
-    assertEquals(sampleSeller, updatedSell.broker)
-
-    Shout updatedBuy = results.findAll {it instanceof Shout && it.buySellIndicator == BuySellIndicator.BUY}.first()
-    assertEquals(11.0, updatedBuy.limitPrice)
-    assertEquals(0.0, updatedBuy.quantity)
-    assertEquals(11.0, updatedBuy.executionPrice)
-    assertEquals(10.0, updatedBuy.executionQuantity)
-    assertEquals(ModReasonCode.EXECUTION, updatedBuy.modReasonCode)
-    assertEquals(sampleBuyer, updatedBuy.broker)
-
-    MarketTransaction tradeLog = results.findAll {it instanceof MarketTransaction && it.transactionType == MarketTransactionType.TRADE}.first()
-    assertEquals(11.0, tradeLog.price)
-    assertEquals(10.0, tradeLog.quantity)
-    assertEquals(sampleProduct, tradeLog.product)
-  }
-
-*/
 }
