@@ -14,15 +14,16 @@ import org.apache.commons.lang.builder.HashCodeBuilder
 class Turnover implements Comparable {
 
   BigDecimal price
-  double aggregatedQuantityAsk
-  double aggregatedQuantityBid
+  BigDecimal aggregatedQuantityAsk
+  BigDecimal aggregatedQuantityBid
+
 
   private void setExecutableVolume(BigDecimal executableVolume) {
     //do nothing, method just prevents generation of a public setter
   }
 
   public BigDecimal getExecutableVolume() {
-    return Math.min(Math.max(0, aggregatedQuantityAsk), Math.max(0, aggregatedQuantityBid))
+    return Math.min(Math.max(0.0, aggregatedQuantityAsk), Math.max(0.0, aggregatedQuantityBid))
   }
 
   private void setSurplus(BigDecimal surplus) {
