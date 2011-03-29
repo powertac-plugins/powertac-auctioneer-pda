@@ -101,7 +101,7 @@ class AuctionService implements Auctioneer {
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!turnover.executableVolume || !turnover.price) log.error("Turnover did not contain information on executable volume and / or price.")
+        if (!turnover?.executableVolume || !turnover?.price) log.error("Turnover did not contain information on executable volume and / or price.")
 
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
@@ -125,6 +125,8 @@ class AuctionService implements Auctioneer {
           while (askIterator.hasNext() && aggregQuantityAsk < turnover.executableVolume) {
             aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
           }
+
+          println "Executed bids: ${aggregQuantityBid}, asks: ${aggregQuantityAsk}, price: ${turnover.price}"
 
           /** Todo writeTradeLog(aggregQuantityAsk, aggregQuantityBid), replace stat object in method with turnover object   */
         }
@@ -203,7 +205,9 @@ class AuctionService implements Auctioneer {
     if (!allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
 
     /** Todo: Settlement has to be implemented   */
-    accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, allocatedShout.executionPrice, allocatedShout.executionQuantity)
+    def settlementQuantity = (allocatedShout.buySellIndicator==BuySellIndicator.BUY)? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
+    def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY)? -allocatedShout.executionPrice : allocatedShout.executionPrice
+    accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
 
     aggregQuantityAllocated += allocatedShout.executionQuantity
     return aggregQuantityAllocated

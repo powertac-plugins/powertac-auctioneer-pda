@@ -28,6 +28,7 @@ import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.enumerations.ModReasonCode
 import grails.test.GrailsUnitTestCase
 import org.powertac.common.Orderbook
+import org.powertac.common.*
 
 /**
  * Testing the auctionService
@@ -47,21 +48,42 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   Shout sellShout
 
   def auctionService
+  def accountingService
   def timeService
 
   protected void setUp() {
     super.setUp()
-    start = new DateTime(2011, 1, 1, 12, 0, 0, 0, DateTimeZone.UTC).toInstant()
-    timeService.setCurrentTime(start)
+    def now = new DateTime(2011, 1, 26, 12, 0, 0, 0, DateTimeZone.UTC).toInstant()
+    timeService.setCurrentTime(now)
     sampleSeller = new Broker(username: "SampleSeller")
     assert (sampleSeller.save())
     sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
     sampleProduct = new Product(productType: ProductType.Future)
     assert (sampleProduct.save())
-    sampleTimeslot = new Timeslot(serialNumber: 1, enabled: true, startInstant: new Instant(), endInstant: new Instant())
+    // set up some timeslots
+    def ts = new Timeslot(serialNumber: 3,
+            startInstant: new Instant(now.millis - TimeService.HOUR),
+            endInstant: now, enabled: false)
+    assert (ts.save())
+    ts = new Timeslot(serialNumber: 4,
+            startInstant: now,
+            endInstant: new Instant(now.millis + TimeService.HOUR),
+            enabled: false)
+    assert (ts.save())
+    sampleTimeslot = new Timeslot(serialNumber: 5,
+            startInstant: new Instant(now.millis + TimeService.HOUR),
+            endInstant: new Instant(now.millis + TimeService.HOUR * 2),
+            enabled: true)
     assert (sampleTimeslot.validate())
     assert (sampleTimeslot.save())
+    ts = new Timeslot(serialNumber: 6,
+            startInstant: new Instant(now.millis + TimeService.HOUR * 2),
+            endInstant: new Instant(now.millis + TimeService.HOUR * 3),
+            enabled: true)
+    assert (ts.save())
+
+
 
     buyShout = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY)
     buyShout2 = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY)
@@ -135,7 +157,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
   void testSimpleAskAndBidEntryInEmptyOrderbook() {
-    /** init              */
+    /** init               */
     buyShout.quantity = 50
     buyShout.limitPrice = 11
     buyShout.transactionId = "tbd"
@@ -164,7 +186,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.askSize1)
   }
 
-  /** Incoming shout (bid) adds quantity to existing price level              */
+  /** Incoming shout (bid) adds quantity to existing price level               */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
@@ -392,7 +414,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
   void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMinimalSurplus() {
-     //init
+    //init
     sellShout.limitPrice = 11.0
     sellShout.quantity = 20.0
     auctionService.processShout(sellShout)
@@ -457,7 +479,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     buyShout3.quantity = 40.0
     auctionService.processShout(buyShout3)
 
-
     //action
     def shouts = Shout.list()
     Turnover turnover = auctionService.calcUniformPrice(shouts)
@@ -482,9 +503,42 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //action
     auctionService.clearMarket()
 
+    // Validate persisted obejcts
+    assertEquals(2, Shout.list().size())
 
+    Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 11.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
+    }
+    assertNotNull(s3)
+    //assert (s3.latest)
+    assertEquals(BuySellIndicator.SELL, s3.buySellIndicator)
+    assertEquals(10.0, s3.executionQuantity)
+    assertEquals(11.0, s3.executionPrice)
+
+    Shout s4 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 11.0)
+      eq('quantity', 0.0)
+      eq('modReasonCode', ModReasonCode.EXECUTION)
+    }
+    assertNotNull(s4)
+    //assert (s4.latest)
+    assertEquals(BuySellIndicator.BUY, s4.buySellIndicator)
+    assertEquals(10.0, s4.executionQuantity)
+    assertEquals(11.0, s4.executionPrice)
+
+    // Validate settlement
+    accountingService.activate(timeService.currentTime, 3)
+    MarketPosition mpBuyer = MarketPosition.findByBrokerAndTimeslot(sampleBuyer, sampleTimeslot)
+    MarketPosition mpSeller = MarketPosition.findByBrokerAndTimeslot(sampleSeller, sampleTimeslot)
+
+    assertEquals(10.0, mpBuyer.overallBalance)
+    assertEquals(-10.0, mpSeller.overallBalance)
+
+    //assertEquals(-110.0, mpBuyer.broker.cash.overallBalance)
+    //assertEquals(110.0, mpSeller.broker.cash.overallBalance)
+
+    /* Todo Public information */
   }
-
-
-
 }
