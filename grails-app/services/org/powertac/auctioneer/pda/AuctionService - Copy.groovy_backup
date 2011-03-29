@@ -1,0 +1,651 @@
+package org.powertac.auctioneer.pda
+
+import org.powertac.common.interfaces.Auctioneer
+import org.powertac.common.Shout
+import org.powertac.common.Competition
+import org.powertac.common.enumerations.ModReasonCode
+import org.powertac.common.IdGenerator
+import org.powertac.common.exceptions.ShoutCreationException
+import org.powertac.common.exceptions.ShoutDeletionException
+import org.powertac.common.Product
+import org.powertac.common.enumerations.BuySellIndicator
+import org.powertac.common.MarketTransaction
+import org.powertac.common.enumerations.MarketTransactionType
+import org.powertac.common.enumerations.OrderType
+import org.powertac.common.Timeslot
+import org.powertac.common.exceptions.ShoutUpdateException
+import org.powertac.common.Orderbook
+
+class AuctionService implements Auctioneer {
+
+  def idGenerator
+
+  public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
+  public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
+
+  /*
+  * Implement Auctioneer interface methods
+  */
+
+  /**
+   * Process incoming shout: validate submitted shout and add to market's orderbook
+   * Add serverside properties: modReasonCode, transactionId, (comment)s
+   * Update the orderbook and persist shout
+   */
+
+  // TODO change code to latest common
+
+  void processShout(Shout incomingShout) {
+    if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
+
+    incomingShout.modReasonCode = ModReasonCode.INSERT
+
+
+    if (!incomingShout.save()) {
+      log.error("Failed to create shout: ${incomingShout.errors}")
+      log.error incomingShout.errors.each { it.toString() }
+    }
+
+    Orderbook updatedOrderbook = updateOrderbook(incomingShout)
+    if (updatedOrderbook) {
+      if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}
+    }
+  }
+
+
+
+  void clearMarket() {
+
+    def products = Product.findAll()
+    def timeslots = Timeslot.findAllByEnabled(true)
+    Turnover turnover
+
+    /** find and process all shout candidates for each enabled timeslot and each product */
+    timeslots.each { timeslot ->
+      products.each { product ->
+
+        /** set unique transactionId for clearing this particular timeslot and product  */
+        BigDecimal transactionId = idGenerator.createId()
+
+        /** find candidates that have to be cleared for this timeslot */
+        def candidates = Shout.withCriteria {
+          eq('product', product)
+          eq('timeslot', timeslot)
+        }
+
+        /** calculate uniform execution price for following clearing */
+        if (candidates?.size() >= 1) {
+          turnover = calcUniformPrice(candidates)
+        } else {
+          log.info "No Shouts found for uniform price calculation."
+        }
+
+        /** split candidates list in sorte bid and ask lists */
+        List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
+        List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
+
+        if (!turnover.executableVolume || !turnover.price) log.error("Turnover did not contain information on executable volume and / or price.")
+
+        if (candidates?.size() < 1) {
+          log.info "No Shouts found for allocation."
+        } else {
+          /** Determine bids (asks) that are above (below) the determined execution price */
+          bids = bids.findAll {it.limitPrice >= turnover.price}
+          asks = asks.findAll {it.limitPrice <= turnover.price}
+
+          BigDecimal aggregQuantityBid = 0.0
+          BigDecimal aggregQuantityAsk = 0.0
+
+          /** Allocate all single bids equal/above the execution price */
+          Iterator bidIterator = bids.iterator()
+          while (bidIterator.hasNext() && aggregQuantityBid < turnover.executableVolume) {
+            /** Todo implement cash and position settlement */
+            aggregQuantityBid = allocateSingleShout(bidIterator.next(), aggregQuantityBid, turnover, transactionId)
+          }
+
+          /** Allocate all single asks equal/below the execution price */
+          Iterator askIterator = asks.iterator()
+          while (askIterator.hasNext() && aggregQuantityAsk < stat.executableVolume) {
+            aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
+          }
+
+          /** Todo writeTradeLog(aggregQuantityAsk, aggregQuantityBid) replace stat */
+        }
+      }
+    }
+
+  }
+
+  /*
+ List processShoutCreate(ShoutDoCreateCmd shoutDoCreate) {
+   List output = []
+
+   if (shoutDoCreate.orderType == OrderType.MARKET) log.error("Market order type is not supported in this version.")
+
+   Shout shoutInstance = new Shout()
+
+   shoutInstance.broker = shoutDoCreate.broker
+
+   shoutInstance.product = shoutDoCreate.product
+   shoutInstance.timeslot = shoutDoCreate.timeslot
+   shoutInstance.limitPrice = shoutDoCreate.limitPrice
+   shoutInstance.quantity = shoutDoCreate.quantity
+   shoutInstance.buySellIndicator = shoutDoCreate.buySellIndicator
+   shoutInstance.orderType = shoutDoCreate.orderType
+
+   shoutInstance.modReasonCode = ModReasonCode.INSERT
+   shoutInstance.transactionId = shoutInstance.id
+
+   if (!shoutInstance.save()) {
+     println shoutInstance.errors.each { it.toString() }
+     log.error("Failed to create shout: ${shoutInstance.errors}")
+     return output
+   }
+
+   Orderbook updatedOrderbook = updateOrderbook(shoutInstance)
+   if (updatedOrderbook) {
+     output << updatedOrderbook
+     MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
+     if (updatedQuote) output << updatedQuote
+   }
+
+   return output
+ }
+
+ /**
+  * Delete Shout
+  * Validate shoutId, shoutInstance
+  * Update/save old version of inserted shout and save/return latest version of deleted shout
+  * Todo: Broker and Competition validation?
+  */
+  /*
+    public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
+      List output = []
+      def shoutId = shoutDoDeleteCmd.shoutId
+      if (!shoutId) {
+        log.error("Failed to delete shout. No shout id found: ${shoutId}.")
+        return output
+      }
+
+      def shoutInstance = Shout.findByShoutId(shoutId, true)
+      if (!shoutInstance) {
+        log.error("Failed to delete shout. No shout found for id: ${shoutId}")
+        return output
+      }
+      Shout delShout = processShoutDelete(shoutInstance)
+      output << delShout
+
+      Orderbook updatedOrderbook = updateOrderbook(delShout)
+      if (updatedOrderbook) {
+        output << updatedOrderbook
+        MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
+        if (updatedQuote) output << updatedQuote
+      }
+
+      return output
+    }
+  */
+
+  private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
+
+    def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
+    delShout.transactionId = IdGenerator.createId()
+    if (!delShout.save()) throw new ShoutDeletionException("Failed to save latest version of deleted shout: ${shoutInstance.errors}")
+
+    return delShout
+  }
+
+  /**
+   * Update Shout
+   * Validate shoutId, shoutInstance
+   * Delete old shout and create copy with modified quantity/limitPrice
+   */
+  /*
+ public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
+   List output = []
+   def shoutId = shoutDoUpdateCmd.shoutId
+   if (!shoutId) {
+     log.error("Failed to update shout. No shout id found: ${shoutId}.")
+     return output
+   }
+   def shoutInstance = Shout.findByShoutId(shoutId, true)
+   if (!shoutInstance) {
+     log.error("Failed to update shout, No shout found for id: ${shoutId}")
+     return output
+   }
+
+   def delShout = processShoutDelete(shoutInstance)
+   Shout updatedShout = delShout.initModification(ModReasonCode.MODIFICATION)
+
+   updatedShout.quantity = shoutDoUpdateCmd.quantity ?: delShout.quantity
+   updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice ?: delShout.limitPrice
+   updatedShout.transactionId = IdGenerator.createId()
+
+   if (!updatedShout.save()) {
+     log.error("Failed to save latet version of updated shout: ${updatedShout.errors}")
+     return output
+   }
+
+   Orderbook updatedOrderbook = updateOrderbook(updatedShout)
+   if (updatedOrderbook) {
+     output << updatedOrderbook
+     MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
+     if (updatedQuote) output << updatedQuote
+   }
+
+   return output
+ }
+
+ public List clearMarket() {
+   List resultingList = []
+   def products = Product.findAll()
+   def timeslots = Timeslot.findAllByEnabled(true)
+
+   // Find and process all shout candidates for each timeslot and each product
+   timeslots.each { timeslot ->
+     products.each { product ->
+
+       def candidates = Shout.withCriteria {
+         eq('product', product)
+         eq('timeslot', timeslot)
+       }
+
+       Map stat = calcUniformPrice(candidates)
+       stat.product = product
+       stat.timeslot = timeslot
+       stat.transactionId = IdGenerator.createId() //Todo: Set transactionId properly
+
+       List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
+       List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
+
+       if (!stat.executableVolume || !stat.price) log.error("Stats did not contain information on executable volume and / or price.")
+
+       if (candidates?.size() < 1) {
+         stat.allocationStatus = "No Shouts found for allocation."
+       } else {
+         //Determine bids and asks that will be allocated in this matching
+         bids = bids.findAll {it.limitPrice >= stat.price}
+         asks = asks.findAll {it.limitPrice <= stat.price}
+
+         BigDecimal aggregQuantityBid = 0.0
+         BigDecimal aggregQuantityAsk = 0.0
+
+         //Allocate bids
+         Iterator bidIterator = bids.iterator()
+         while (bidIterator.hasNext() && aggregQuantityBid < stat.executableVolume) {
+           List results = allocateSingleShout(bidIterator.next(), aggregQuantityBid, stat) //results contains processed shout (index 0) and updated aggregQuantityBid (index 1)
+           resultingList << results[0] //add allocated Shout to returned list
+           resultingList << settleCashUpdate(results[0]) //add CashDoUpdateCmd to returned list
+           resultingList << settlePositionUpdate(results[0])  //add PositionDoUpdateCmd to returned list
+           aggregQuantityBid = results[1]
+         }
+         //Allocate asks
+         Iterator askIterator = asks.iterator()
+         while (askIterator.hasNext() && aggregQuantityAsk < stat.executableVolume) {
+           List results = allocateSingleShout(askIterator.next(), aggregQuantityAsk, stat) //results contains processed shout (index 0) and updated aggregQuantityAsk (index 1)
+           resultingList << results[0] //add allocated Shout to returned list
+           resultingList << settleCashUpdate(results[0]) //add CashDoUpdateCmd to returned list
+           resultingList << settlePositionUpdate(results[0])  //add PositionDoUpdateCmd to returned list
+           aggregQuantityBid = results[1]
+         }
+
+         stat.allocatedQuantityAsk = aggregQuantityAsk
+         stat.allocatedQuantityBid = aggregQuantityBid
+
+
+         resultingList << writeTradeLog(stat)
+       }
+     }
+   }
+
+   return resultingList
+ }
+
+ /**
+  * Calculate uniform price for the current market clearing. The price is determined in order to maximize
+  * the execution quantity. If there exist more than one price, the price with the minimum surplus is chosen.
+  *
+  * @param shouts - list of all potential candidates for the matching per product in a specified timeslot
+  *
+  * @return Map that contains statistical data of the determined values (price, executableVolume, ...)
+  */
+
+  public Turnover calcUniformPrice(List<Shout> shouts) {
+
+    log.debug("Pricing shouts with uniform pricing...");
+
+    SortedSet<Turnover> turnovers = new TreeSet<Turnover>()
+    def prices = shouts.collect {it.limitPrice}.unique()
+    prices.each {price ->
+      Turnover turnover = new Turnover()
+      def matchingBids = shouts.findAll {it.buySellIndicator == BuySellIndicator.BUY && it.limitPrice >= price}
+      def matchingAsks = shouts.findAll {it.buySellIndicator == BuySellIndicator.SELL && it.limitPrice <= price}
+      turnover.aggregatedQuantityBid = matchingBids?.size() > 0 ? matchingBids.sum {it.quantity} : 0.0
+      turnover.aggregatedQuantityAsk = matchingAsks?.size() > 0 ? matchingAsks.sum {it.quantity} : 0.0
+      turnover.price = price
+      turnovers << turnover
+    }
+    Turnover maxTurnover = turnovers?.first() //Turnover implement comparable interface and are sorted according to max executable volume and then min surplus
+    if (maxTurnover) {
+      //stat.putAll(aggregatedQuantityAsk: maxTurnover.aggregatedQuantityAsk, aggregatedQuantityBid: maxTurnover.aggregatedQuantityBid, price: maxTurnover.price, executableVolume: maxTurnover.executableVolume, surplus: maxTurnover.surplus, pricingStatus: "Success")
+      return turnover
+    } else {
+      log.info "No maximum turnover found during uniform price calculation"
+      return null
+    }
+
+  }
+
+  /**
+   * Allocate a single shout by updating modReasonCode(EXECUTION/PARTIALEXECUTION) and quantity.
+   * Set execution price, execution quantity, transactionId and comment.
+   *
+   * @param shout - incoming shout to allocate, i.e. to set allocation price, allocation quantity and so on
+   * @param aggregQuantityAllocated - overall quantity that was previously allocated to other shouts
+   * @param stat - statistics data that has to contain map entries <code>executableVolume</code> and <code>price</code>
+   *
+   * @return list that contains updated allocatedShout (index 0) and updated aggregQuantityAllocated (index 1)
+   */
+  private BigDecimal allocateSingleShout(Shout incomingShout, BigDecimal aggregQuantityAllocated, Turnover turnover, BigDecimal transactionId) {
+
+    BigDecimal executableVolume = turnover.executableVolume
+    Shout allocatedShout
+
+    if (!incomingShout.validate()) log.error("Failed to validate shout when allocating single shout: ${incomingShout.errors}")
+
+    if (incomingShout.quantity + aggregQuantityAllocated <= executableVolume) {
+      allocatedShout = incomingShout.initModification(ModReasonCode.EXECUTION)
+      allocatedShout.executionQuantity = incomingShout.quantity
+      allocatedShout.quantity = 0.0
+    } else if (executableVolume - aggregQuantityAllocated > 0) {
+      allocatedShout = incomingShout.initModification(ModReasonCode.PARTIALEXECUTION)
+      allocatedShout.executionQuantity = executableVolume - aggregQuantityAllocated
+      allocatedShout.quantity = incomingShout.quantity - allocatedShout.executionQuantity
+    } else {
+      log.error("Market could not be cleared. Unexpected conditions when allocating single shout")
+    }
+    allocatedShout.executionPrice = turnover.price
+    allocatedShout.transactionId = transactionId
+    allocatedShout.comment = "Matched by org.powertac.auctioneer.pda"
+    if (allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShouts.errors}"
+
+    aggregQuantityAllocated += allocatedShout.executionQuantity
+    return aggregQuantityAllocated
+  }
+
+  /**
+   * Check if there is a new Quote (bestBid or bestAsk level has changed) based on incoming orderbook. If this
+   * is the case, create and save updated Quote as a TransactionLog instance. The previous Quote with latest=true
+   * of the specified product and timeslot is set outdated and persisted.
+   *
+   * @param orderbook - latest orderbook reporting a change in top 10levels of the book
+   *
+   * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
+   */
+  private MarketTransaction updateQuote(Orderbook orderbook) {
+    MarketTransaction newTransactionLog
+    Boolean latestTransactionLogExists = true
+
+    MarketTransaction latestTransactionLog = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
+      eq('product', orderbook.product)
+      eq('timeslot', orderbook.timeslot)
+      eq('transactionType', MarketTransactionType.QUOTE)
+    }
+
+    if (!latestTransactionLog) {
+      latestTransactionLog = new MarketTransaction(bidSize: 0.0, askSize: 0.0)
+      latestTransactionLogExists = false
+    }
+
+    if (latestTransactionLog.bid != orderbook.bid0
+            || latestTransactionLog.bidSize != orderbook.bidSize0
+            || latestTransactionLog.ask != orderbook.ask0
+            || latestTransactionLog.askSize != orderbook.askSize0) {
+
+      //if (latestTransactionLogExists) {
+      //  latestTransactionLog.latest = false
+      //  if (!latestTransactionLog.save()) log.error("Failed to save outdated Quote TransactionLog: ${latestTransactionLog.errors}")
+      //}
+
+      newTransactionLog = latestTransactionLog
+      newTransactionLog.transactionType = MarketTransactionType.QUOTE
+      newTransactionLog.product = orderbook.product
+      newTransactionLog.timeslot = orderbook.timeslot
+      newTransactionLog.transactionId = orderbook.transactionId
+      //newTransactionLog.latest = true
+
+      newTransactionLog.bid = (orderbook.bid0 ?: null)
+      newTransactionLog.bidSize = (orderbook.bidSize0 ?: null)
+      newTransactionLog.ask = (orderbook.ask0 ?: null)
+      newTransactionLog.askSize = (orderbook.askSize0 ?: null)
+
+      if (!newTransactionLog.save()) log.error("Failed to save new Quote TransactionLog: ${newTransactionLog.errors}")
+    }
+
+    return newTransactionLog
+  }
+
+  /**
+   * Create and save updated Quote as a TransactionLog instance for the given *sorted* list of asks and bids.
+   * Previous Quote with latest=true of product and timeslot is set outdated and persisted.
+   *
+   * @param bids - sorted by descending limit price
+   * @param asks - sorted by ascending limit price
+   * @param stat - statistics data contain information about product, timeslot and transactionId
+   *
+   * @return TransactionLog object with quote data (ask, bid, askSize, bidSize) for specified product and timeslot
+   */
+  private MarketTransaction writeTradeLog(Map stat) {
+    MarketTransaction tl = (MarketTransaction) MarketTransaction.withCriteria(uniqueResult: true) {
+      eq('product', stat.product)
+      eq('timeslot', stat.timeslot)
+      eq('transactionType', MarketTransactionType.TRADE)
+    }
+
+    //if (oldTl) {
+    //  oldTl.latest = false
+    //  if (!oldTl.save()) log.error("Failed to save outdated TransactionLog after clearing: ${oldTl.errors}")
+    //}
+
+    if (tl == null)
+      tl = new MarketTransaction()
+    tl.transactionType = MarketTransactionType.TRADE
+    tl.product = stat.product
+    tl.timeslot = stat.timeslot
+    tl.transactionId = stat.transactionId
+
+    tl.price = stat.price
+    tl.quantity = stat.executableVolume
+
+    if (!tl.save()) log.error("Failed to save TransactionLog after clearing: ${tl.errors}")
+    return tl
+  }
+
+  /*
+  * get top ten from db
+  * updateOrderbook
+  *
+  * if change in quote write TransactionLog
+  */
+
+  private Orderbook updateOrderbook(Shout shout) {
+
+    Boolean firstOrderbook
+
+    Orderbook latestOrderbook = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+    }
+
+    if (!latestOrderbook) {
+      latestOrderbook = new Orderbook()  //create new orderbook
+      firstOrderbook = true
+    }
+
+    def bestAsks = Shout.withCriteria() {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+      eq('buySellIndicator', BuySellIndicator.SELL)
+      maxResults(10)
+      order('limitPrice', 'asc')
+
+      projections {
+        groupProperty('limitPrice')
+        sum('quantity')
+      }
+    }
+
+    def bestBids = Shout.withCriteria() {
+      eq('product', shout.product)
+      eq('timeslot', shout.timeslot)
+      eq('buySellIndicator', BuySellIndicator.BUY)
+      maxResults(10)
+      order('limitPrice', 'desc')
+
+      projections {
+        groupProperty('limitPrice')
+        sum('quantity')
+      }
+    }
+
+    BigDecimal[][][] newOrderbookArray = new BigDecimal[2][2][10]
+    BigDecimal[][][] latestOrderbookArray = latestOrderbook.getOrderbookArray()
+    Boolean orderbookChangeFound = false
+    Integer levelCounter = 0
+
+    if (bestBids.size() == 0) { //no open bid orders left
+      if (latestOrderbook.bid0 != null) {
+        orderbookChangeFound = true //empty bid orderbook is new situation if latestOrderbook contained bid
+      }
+    }
+    else {
+      //BID: check if new orderbook entry && create newOrderbookArray
+      levelCounter = 0
+      while (levelCounter <= 9) {
+        //create newOrderbookArray bid entry
+        if (bestBids[levelCounter]) {
+          newOrderbookArray[0][0][levelCounter] = bestBids[levelCounter][0] //price
+          newOrderbookArray[0][1][levelCounter] = bestBids[levelCounter][1] //size
+        } else {
+          //fill empty levels (in case of deletion this is necessary)
+          newOrderbookArray[0][0][levelCounter] = null
+          newOrderbookArray[0][1][levelCounter] = 0.0
+        }
+
+        //changed?
+        if (!orderbookChangeFound && !(latestOrderbookArray[0][0][levelCounter] == newOrderbookArray[0][0][levelCounter] && latestOrderbookArray[0][1][levelCounter] == newOrderbookArray[0][1][levelCounter])) {
+          orderbookChangeFound = true
+        }
+        levelCounter++
+      }
+    }
+
+    //no open ask orders left
+    if (bestAsks.size() == 0) {
+      //empty ask orderbook is new situation
+      if (latestOrderbook.ask0 != null) {
+        orderbookChangeFound = true
+      }
+    }
+    else {
+      //ASK: check if new orderbook entry && create newOrderbookArray
+      levelCounter = 0
+
+      while (levelCounter <= 9) {
+        //create newOrderbookArray bid entry
+        if (bestAsks[levelCounter]) {
+          newOrderbookArray[1][0][levelCounter] = bestAsks[levelCounter][0] //price
+          newOrderbookArray[1][1][levelCounter] = bestAsks[levelCounter][1] //size
+        } else {
+          //fill empty levels (in case of deletion this is necessary)
+          newOrderbookArray[1][0][levelCounter] = null
+          newOrderbookArray[1][1][levelCounter] = 0.0
+        }
+
+        //changed?
+        if (!orderbookChangeFound && !(latestOrderbookArray[1][0][levelCounter] == newOrderbookArray[1][0][levelCounter] && latestOrderbookArray[1][1][levelCounter] == newOrderbookArray[1][1][levelCounter])) {
+          orderbookChangeFound = true
+        }
+        levelCounter++
+
+      }
+    }
+
+    //If there are changes found create new orderbook entry
+    if (orderbookChangeFound) {
+      if (!firstOrderbook) {
+        //latestOrderbook.latest = false
+        if (!latestOrderbook.save()) log.error("Failed to save outdated Orderbook:${latestOrderbook.errors}")
+      }
+
+      latestOrderbook.product = shout.product
+      latestOrderbook.timeslot = shout.timeslot
+      latestOrderbook.transactionId = shout.transactionId
+      latestOrderbook.dateExecuted = shout.dateMod
+      latestOrderbook.setOrderbookArray(newOrderbookArray)
+      if (!latestOrderbook.save()) log.error("Failed to save updated Orderbook: ${newOrderbook.errors}")
+
+      return latestOrderbook
+    }
+    return null
+  }
+
+  /**
+   * Settlement methods calculate position and cashUpdates based on the current market clearing
+   * @param shout - matched shout in the current clearing
+   *
+   * @return cashDoUpdateCommand / positionDoUpdateCommand       *
+   */
+
+  /*
+    private CashDoUpdateCmd settleCashUpdate(Shout shout) {
+      CashDoUpdateCmd cashUpdate = new CashDoUpdateCmd()
+
+      cashUpdate.broker = shout.broker
+      cashUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? shout.executionPrice * shout.executionQuantity : -shout.executionPrice * shout.executionQuantity
+      cashUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
+      cashUpdate.origin = "org.powertac.auctioneer.pda"
+
+      return cashUpdate
+    }
+
+    private PositionDoUpdateCmd settlePositionUpdate(Shout shout) {
+      PositionDoUpdateCmd posUpdate = new PositionDoUpdateCmd()
+
+      posUpdate.broker = shout.broker
+      posUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? -shout.executionQuantity : shout.executionQuantity
+      posUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
+      posUpdate.origin = "org.powertac.auctioneer.pda"
+
+      return posUpdate
+    }
+  /*
+  * Implement CompetitionBaseEvents interface methods
+  */
+
+  void competitionBeforeStart(Competition competition) {
+    //To change body of implemented methods use File | Settings | File Templates.
+  }
+
+  void competitionAfterStart(Competition competition) {
+    //To change body of implemented methods use File | Settings | File Templates.
+  }
+
+  void competitionBeforeStop(Competition competition) {
+    //To change body of implemented methods use File | Settings | File Templates.
+  }
+
+  void competitionAfterStop(Competition competition) {
+    //To change body of implemented methods use File | Settings | File Templates.
+  }
+
+  void competitionReset(Competition competition) {
+    //To change body of implemented methods use File | Settings | File Templates.
+  }
+
+
+
+  ;
+
+
+}

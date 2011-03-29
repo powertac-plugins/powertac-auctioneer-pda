@@ -22,6 +22,7 @@ class AuctionService implements Auctioneer {
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
 
+  def accountingService
   /*
   * Implement Auctioneer interface methods
   */
@@ -29,7 +30,7 @@ class AuctionService implements Auctioneer {
   /**
    * Process incoming shout: validate submitted shout and add to market's orderbook
    * Add serverside properties: modReasonCode, transactionId, (comment)s
-   * Update the orderbook and persist shout   */
+   * Update the orderbook and persist shout    */
   void processShout(Shout incomingShout) {
     if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
 
@@ -55,27 +56,27 @@ class AuctionService implements Auctioneer {
     def timeslots = Timeslot.findAllByEnabled(true)
     Turnover turnover
 
-    /** find and process all shout candidates for each enabled timeslot and each product  */
+    /** find and process all shout candidates for each enabled timeslot and each product   */
     timeslots.each { timeslot ->
       products.each { product ->
 
-        /** set unique transactionId for clearing this particular timeslot and product   */
+        /** set unique transactionId for clearing this particular timeslot and product    */
         String transactionId = IdGenerator.createId()
 
-        /** find candidates that have to be cleared for this timeslot  */
+        /** find candidates that have to be cleared for this timeslot   */
         def candidates = Shout.withCriteria {
           eq('product', product)
           eq('timeslot', timeslot)
         }
 
-        /** calculate uniform execution price for following clearing  */
+        /** calculate uniform execution price for following clearing   */
         if (candidates?.size() >= 1) {
           turnover = calcUniformPrice(candidates)
         } else {
           log.info "No Shouts found for uniform price calculation."
         }
 
-        /** split candidates list in sorte bid and ask lists  */
+        /** split candidates list in sorte bid and ask lists   */
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
@@ -84,27 +85,27 @@ class AuctionService implements Auctioneer {
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
         } else {
-          /** Determine bids (asks) that are above (below) the determined execution price  */
+          /** Determine bids (asks) that are above (below) the determined execution price   */
           bids = bids.findAll {it.limitPrice >= turnover.price}
           asks = asks.findAll {it.limitPrice <= turnover.price}
 
           BigDecimal aggregQuantityBid = 0.0
           BigDecimal aggregQuantityAsk = 0.0
 
-          /** Allocate all single bids equal/above the execution price  */
+          /** Allocate all single bids equal/above the execution price   */
           Iterator bidIterator = bids.iterator()
           while (bidIterator.hasNext() && aggregQuantityBid < turnover.executableVolume) {
-            /** Todo implement cash and position settlement  */
+            /** Todo implement cash and position settlement   */
             aggregQuantityBid = allocateSingleShout(bidIterator.next(), aggregQuantityBid, turnover, transactionId)
           }
 
-          /** Allocate all single asks equal/below the execution price  */
+          /** Allocate all single asks equal/below the execution price   */
           Iterator askIterator = asks.iterator()
           while (askIterator.hasNext() && aggregQuantityAsk < stat.executableVolume) {
             aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
           }
 
-          /** Todo writeTradeLog(aggregQuantityAsk, aggregQuantityBid), replace stat object in method with turnover object  */
+          /** Todo writeTradeLog(aggregQuantityAsk, aggregQuantityBid), replace stat object in method with turnover object   */
         }
       }
     }
@@ -178,9 +179,10 @@ class AuctionService implements Auctioneer {
     allocatedShout.executionPrice = turnover.price
     allocatedShout.transactionId = transactionId
     allocatedShout.comment = "Matched by org.powertac.auctioneer.pda"
-    if (allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
+    if (!allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
 
-    /** Todo: Settlement has to be implemented  */
+    /** Todo: Settlement has to be implemented   */
+    accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, allocatedShout.executionPrice, allocatedShout.executionQuantity)
 
     aggregQuantityAllocated += allocatedShout.executionQuantity
     return aggregQuantityAllocated
@@ -353,39 +355,6 @@ class AuctionService implements Auctioneer {
     }
     return null
   }
-
-  /**
-   * Settlement methods calculate position and cashUpdates based on the current market clearing
-   * @param shout - matched shout in the current clearing
-   *
-   * @return cashDoUpdateCommand / positionDoUpdateCommand       *
-   */
-
-  /*
-    private CashDoUpdateCmd settleCashUpdate(Shout shout) {
-      CashDoUpdateCmd cashUpdate = new CashDoUpdateCmd()
-
-      cashUpdate.broker = shout.broker
-      cashUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? shout.executionPrice * shout.executionQuantity : -shout.executionPrice * shout.executionQuantity
-      cashUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
-      cashUpdate.origin = "org.powertac.auctioneer.pda"
-
-      return cashUpdate
-    }
-
-    private PositionDoUpdateCmd settlePositionUpdate(Shout shout) {
-      PositionDoUpdateCmd posUpdate = new PositionDoUpdateCmd()
-
-      posUpdate.broker = shout.broker
-      posUpdate.relativeChange = (shout.buySellIndicator == BuySellIndicator.SELL) ? -shout.executionQuantity : shout.executionQuantity
-      posUpdate.reason = "Clearing ${shout.transactionId} for timeslot ${shout.timeslot} and product ${shout.product}."
-      posUpdate.origin = "org.powertac.auctioneer.pda"
-
-      return posUpdate
-    }
-  /*
-  * Implement CompetitionBaseEvents interface methods
-  */
 
   /**
    * Delete Shout
