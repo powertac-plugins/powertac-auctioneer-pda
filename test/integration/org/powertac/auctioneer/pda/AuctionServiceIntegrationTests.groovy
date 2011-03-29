@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) <current-year> by the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.powertac.auctioneer.pda
 
 import org.powertac.common.Shout
@@ -12,6 +28,12 @@ import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.enumerations.ModReasonCode
 import grails.test.GrailsUnitTestCase
 import org.powertac.common.Orderbook
+
+/**
+ * Testing the auctionService
+ *
+ * @author Daniel Schnurr
+ */
 
 class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
@@ -446,6 +468,23 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(50.0, turnover.aggregatedQuantityAsk)
     assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
+
+  void testSimpleMarketClearing() {
+    //init
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
+
+    //action
+    auctionService.clearMarket()
+
+
+  }
+
 
 
 }
