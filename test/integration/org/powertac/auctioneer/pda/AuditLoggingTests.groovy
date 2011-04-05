@@ -58,7 +58,7 @@ class AuditLoggingTests extends GrailsUnitTestCase {
     sampleTimeslot = new Timeslot(serialNumber: 1, enabled: true, startInstant: new Instant(), endInstant: new Instant())
     assert (sampleTimeslot.validate())
     assert (sampleTimeslot.save())
-    buyShout = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY, orderType: OrderType.LIMIT, modReasonCode: ModReasonCode.INSERT)
+    buyShout = new Shout(broker: sampleBuyer, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.BUY, modReasonCode: ModReasonCode.INSERT)
 
   }
 
@@ -71,16 +71,21 @@ class AuditLoggingTests extends GrailsUnitTestCase {
     buyShout.limitPrice = 10.0
     buyShout.quantity = 20.0
     buyShout.transactionId = 1
-
     assert (buyShout.save(flush: true))
 
-
     buyShout.modReasonCode = ModReasonCode.EXECUTION
-    assert (buyShout.save())
+    assert (buyShout.save(flush:true))
+
+    buyShout.limitPrice = 15.0
+    assert (buyShout.save(flush:true))
+
+    buyShout.quantity = 33.0
+    assert (buyShout.save(flush:true))
 
     println "Audit record count: ${AuditLogEvent.count()}"
     //AuditLogEvent.list().each { println it.toString() }
     def trace = AuditLogEvent.findAllByClassNameAndPersistedObjectId(buyShout.getClass().getName(), buyShout.id)
+    assertEquals(4, trace.size())
     trace.each { println "Log ${it.className} ${it.persistedObjectId}, prop:${it.propertyName} was ${it.oldValue}, now ${it.newValue}" }
 
 

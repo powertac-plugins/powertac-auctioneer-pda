@@ -29,6 +29,7 @@ import org.powertac.common.enumerations.ModReasonCode
 import grails.test.GrailsUnitTestCase
 import org.powertac.common.Orderbook
 import org.powertac.common.*
+import org.codehaus.groovy.grails.plugins.orm.auditable.AuditLogEvent
 
 /**
  * Testing the auctionService
@@ -53,6 +54,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   protected void setUp() {
     super.setUp()
+
+    AuditLogEvent.list()*.delete()
     def now = new DateTime(2011, 1, 26, 12, 0, 0, 0, DateTimeZone.UTC).toInstant()
     timeService.setCurrentTime(now)
     sampleSeller = new Broker(username: "SampleSeller")
@@ -126,7 +129,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull s1.transactionId
   }
 
-  void testIncomingBuyAndSellShoutDoCreateCmd() {
+  void testIncomingBuyAndSellShout() {
     sellShout.limitPrice = 10.0
     sellShout.quantity = 10.0
     auctionService.processShout(sellShout)
@@ -157,7 +160,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
   void testSimpleAskAndBidEntryInEmptyOrderbook() {
-    /** init               */
+    /** init                */
     buyShout.quantity = 50
     buyShout.limitPrice = 11
     buyShout.transactionId = "tbd"
@@ -184,9 +187,15 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ob.bidSize1)
     assertNull(ob.ask1)
     assertEquals(0, ob.askSize1)
+
+    Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    println "Size Ob: ${Orderbook.findAllByTimeslot(sampleTimeslot).size()}"
+    def trace = AuditLogEvent.findAllByClassNameAndPersistedObjectId(persistedOb.getClass().getName(), persistedOb.id)
+    trace.each { println "Log ${it.className} ${it.persistedObjectId}, prop:${it.propertyName} was ${it.oldValue}, now ${it.newValue}" }
+
   }
 
-  /** Incoming shout (bid) adds quantity to existing price level               */
+  /** Incoming shout (bid) adds quantity to existing price level                */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
@@ -541,4 +550,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     /* Todo Public information */
   }
+
+  /* Todo: Test market clearing and settlement in more complex situations*/
 }
