@@ -30,6 +30,7 @@ import grails.test.GrailsUnitTestCase
 import org.powertac.common.Orderbook
 import org.powertac.common.*
 import org.codehaus.groovy.grails.plugins.orm.auditable.AuditLogEvent
+import org.powertac.common.interfaces.BrokerProxy
 
 /**
  * Testing the auctionService
@@ -500,6 +501,26 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
   void testSimpleMarketClearing() {
+    // brokerProxy for AccountingService
+    def messages = [:]
+    def proxy =
+      [sendMessage: {broker, message ->
+        if (messages[broker] == null) {
+          messages[broker] = []
+        }
+        messages[broker] << message
+      },
+      sendMessages: {broker, messageList ->
+        if (messages[broker] == null) {
+          messages[broker] = []
+        }
+        messageList.each { message ->
+          messages[broker] << message
+        }
+      }] as BrokerProxy
+    accountingService.brokerProxyService = proxy
+
+
     //init
     sellShout.limitPrice = 11.0
     sellShout.quantity = 20.0

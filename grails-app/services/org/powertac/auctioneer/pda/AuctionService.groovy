@@ -40,7 +40,8 @@ import org.powertac.common.interfaces.BrokerProxy
  * @author Carsten Block, Daniel Schnurr
  */
 
-class AuctionService implements Auctioneer {
+class AuctionService implements Auctioneer,
+                                org.powertac.common.interfaces.BrokerMessageListener {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
@@ -48,7 +49,7 @@ class AuctionService implements Auctioneer {
   def accountingService
   BrokerProxy brokerProxyService
 
-  /*
+    /*
   * Implement Auctioneer interface methods
   */
 
@@ -247,8 +248,6 @@ class AuctionService implements Auctioneer {
 
   private Orderbook updateOrderbook(Shout shout) {
 
-    Boolean firstOrderbook
-
     Orderbook latestOrderbook = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
@@ -256,7 +255,6 @@ class AuctionService implements Auctioneer {
 
     if (!latestOrderbook) {
       latestOrderbook = new Orderbook()  //create new orderbook
-      firstOrderbook = true
     }
 
     def bestAsks = Shout.withCriteria() {
@@ -350,17 +348,17 @@ class AuctionService implements Auctioneer {
 
     //If there are changes found create new orderbook entry
     if (orderbookChangeFound) {
-      if (!firstOrderbook) {
-        //latestOrderbook.latest = false
-        if (!latestOrderbook.save()) log.error("Failed to save outdated Orderbook:${latestOrderbook.errors}")
-      }
 
       latestOrderbook.product = shout.product
       latestOrderbook.timeslot = shout.timeslot
       latestOrderbook.transactionId = shout.transactionId
       latestOrderbook.dateExecuted = shout.dateMod
       latestOrderbook.setOrderbookArray(newOrderbookArray)
-      if (!latestOrderbook.save()) log.error("Failed to save updated Orderbook: ${newOrderbook.errors}")
+
+      latestOrderbook.timeslot.addToOrderbooks(latestOrderbook)
+      latestOrderbook.product.addToOrderbooks(latestOrderbook)
+
+      if (!latestOrderbook.save() ) log.error("Failed to save updated orderbook: ${latestOrderbook.errors} (cascading save)")
 
       return latestOrderbook
     }
