@@ -33,6 +33,9 @@ import org.powertac.common.exceptions.ShoutUpdateException
 import org.powertac.common.Orderbook
 import org.powertac.common.ClearedTrade
 import org.powertac.common.interfaces.BrokerProxy
+import org.powertac.common.PluginConfig
+import org.powertac.common.interfaces.CompetitionControl
+import org.joda.time.Instant
 
 /**
  * Implementation of {@link org.powertac.common.interfaces.Auctioneer}
@@ -41,15 +44,54 @@ import org.powertac.common.interfaces.BrokerProxy
  */
 
 class AuctionService implements Auctioneer,
-                                org.powertac.common.interfaces.BrokerMessageListener {
+                                org.powertac.common.interfaces.BrokerMessageListener,
+                                org.powertac.common.interfaces.TimeslotPhaseProcessor,
+                                org.springframework.beans.factory.InitializingBean {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
 
   def accountingService
   BrokerProxy brokerProxyService
+  CompetitionControl competitionControlService
 
-    /*
+  // read this from plugin config
+  PluginConfig configuration
+  int simulationPhase = 2
+
+  /**
+  * Register for phase 2 activation, to drive tariff publication
+  */
+  void afterPropertiesSet () {
+    competitionControlService?.registerTimeslotPhase(this, simulationPhase)
+    brokerProxyService?.registerBrokerMarketListener(this)
+  }
+
+  // ----------------- Broker message API --------------------
+  /**
+   * Receives incoming broker message
+   */
+  @Override
+  public void receiveMessage (msg)
+  {
+    // dispatch incoming message
+    if (msg instanceof Shout) {
+      log.info "Processing incoming shout from BrokerProxy: ${msg}"
+      processShout(msg)
+      //Todo: do we send a confirmation status msg to broker?
+      //brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
+    } else {
+      brokerProxyService.sendMessage(msg.broker, "No valid object")
+    }
+  }
+
+  @Override
+  public void activate(Instant time, int phase) {
+    log.debug "Activate() called: clearing market now."
+    clearMarket()
+  }
+
+  /*
   * Implement Auctioneer interface methods
   */
 
