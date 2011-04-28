@@ -20,7 +20,7 @@ import grails.test.GrailsUnitTestCase
 import org.powertac.common.Shout
 import org.joda.time.Instant
 import org.powertac.common.Broker
-import org.powertac.common.Product
+//import org.powertac.common.Product
 import org.powertac.common.enumerations.ProductType
 import org.powertac.common.Timeslot
 import org.powertac.common.enumerations.BuySellIndicator
@@ -53,7 +53,7 @@ class AuditLoggingTests extends GrailsUnitTestCase {
     assert (sampleSeller.save())
     sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
-    sampleProduct = new Product(productType: ProductType.Future)
+    sampleProduct = ProductType.Future
     assert (sampleProduct.save())
     sampleTimeslot = new Timeslot(serialNumber: 1, enabled: true, startInstant: new Instant(), endInstant: new Instant())
     assert (sampleTimeslot.validate())

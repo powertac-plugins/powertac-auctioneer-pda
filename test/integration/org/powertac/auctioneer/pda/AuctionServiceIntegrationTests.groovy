@@ -21,7 +21,7 @@ import org.joda.time.Instant
 import org.joda.time.DateTime
 import org.joda.time.DateTimeZone
 import org.powertac.common.Broker
-import org.powertac.common.Product
+//import org.powertac.common.Product
 import org.powertac.common.Timeslot
 import org.powertac.common.enumerations.ProductType
 import org.powertac.common.enumerations.BuySellIndicator
@@ -63,7 +63,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assert (sampleSeller.save())
     sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
-    sampleProduct = new Product(productType: ProductType.Future)
+    sampleProduct = ProductType.Future
     assert (sampleProduct.save())
     // set up some timeslots
     def ts = new Timeslot(serialNumber: 3,

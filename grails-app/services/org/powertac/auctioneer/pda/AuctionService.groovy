@@ -23,7 +23,7 @@ import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
 import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
-import org.powertac.common.Product
+//import org.powertac.common.Product
 import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.MarketTransaction
 import org.powertac.common.enumerations.MarketTransactionType

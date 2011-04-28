@@ -19,7 +19,7 @@ package org.powertac.auctioneer.pda
 import grails.test.*
 import org.powertac.common.Shout
 import org.powertac.common.Competition
-import org.powertac.common.Product
+//import org.powertac.common.Product
 import org.powertac.common.Timeslot
 import org.powertac.common.Broker
 import org.powertac.common.enumerations.BuySellIndicator
