@@ -160,8 +160,9 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull b1.transactionId
   }
 
+  /*
   void testSimpleAskAndBidEntryInEmptyOrderbook() {
-    /** init                */
+
     buyShout.quantity = 50
     buyShout.limitPrice = 11
     buyShout.transactionId = "tbd"
@@ -194,9 +195,10 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     def trace = AuditLogEvent.findAllByClassNameAndPersistedObjectId(persistedOb.getClass().getName(), persistedOb.id)
     trace.each { println "Log ${it.className} ${it.persistedObjectId}, prop:${it.propertyName} was ${it.oldValue}, now ${it.newValue}" }
 
-  }
+  }*/
 
   /** Incoming shout (bid) adds quantity to existing price level                */
+  /*
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
@@ -230,7 +232,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     assertNull(ob.ask1)
     assertEquals(0, ob.askSize1)
-  }
+  } */
 
   void testProcessOfIncomingShoutSequenceConcerningOrderbookUpdateAndShoutPersistence() {
     //init + action
@@ -238,27 +240,27 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sellShout.quantity = 10.0
     auctionService.processShout(sellShout)
 
-    Orderbook firstPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    //Orderbook firstPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
     buyShout.limitPrice = 10.0
     buyShout.quantity = 10.0
     auctionService.processShout(buyShout)
 
-    Orderbook secondPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    //Orderbook secondPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 12.0
     sellShout2.quantity = 20
     auctionService.processShout(sellShout2)
 
-    Orderbook thirdPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    //Orderbook thirdPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 10.0
     buyShout2.quantity = 30.0
     auctionService.processShout(buyShout2)
 
-    Orderbook fourthPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    //Orderbook fourthPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
 
     //validate
     assertEquals(4, Shout.list().size())
@@ -296,7 +298,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
       assertEquals(ModReasonCode.INSERT, shout.modReasonCode)
       assertNotNull shout.transactionId
     }
-
+    /*
     assertNotNull(firstPersistedOb)
     assertEquals(13.0, firstPersistedOb.ask0)
     assertEquals(10.0, firstPersistedOb.askSize0)
@@ -341,6 +343,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, fourthPersistedOb.askSize1)
     assertNull(thirdPersistedOb.ask2)
     assertEquals(0.0, thirdPersistedOb.askSize2)
+    */
   }
 
 
@@ -530,11 +533,15 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     buyShout.quantity = 10.0
     auctionService.processShout(buyShout)
 
+    buyShout2.limitPrice = 2.0
+    buyShout2.quantity = 10.0
+    auctionService.processShout(buyShout2)
+
     //action
     auctionService.clearMarket()
 
     // Validate persisted obejcts
-    assertEquals(2, Shout.list().size())
+    assertEquals(3, Shout.list().size())
 
     Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
       eq('limitPrice', 11.0)
@@ -557,6 +564,14 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(BuySellIndicator.BUY, s4.buySellIndicator)
     assertEquals(10.0, s4.executionQuantity)
     assertEquals(11.0, s4.executionPrice)
+
+    Shout s5 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('limitPrice', 2.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.DELETIONBYSYSTEM)
+    }
+    assertNotNull(s5)
+    assertEquals(BuySellIndicator.BUY, s5.buySellIndicator)
 
     // Validate settlement
     accountingService.activate(timeService.currentTime, 3)
