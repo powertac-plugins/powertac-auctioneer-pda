@@ -36,6 +36,8 @@ import org.powertac.common.interfaces.BrokerProxy
 import org.powertac.common.PluginConfig
 import org.powertac.common.interfaces.CompetitionControl
 import org.joda.time.Instant
+import org.powertac.common.Product
+import org.powertac.common.enumerations.ProductType
 
 /**
  * Implementation of {@link org.powertac.common.interfaces.Auctioneer}
@@ -121,14 +123,15 @@ class AuctionService implements Auctioneer,
 
   void clearMarket() {
 
-    def products = Product.findAll()
+    def products = [ProductType.Future, ProductType.Option]
+    //Product.findAll()
     def timeslots = Timeslot.findAllByEnabled(true)
-    Turnover turnover
     def clearedTradeList = []
 
     /** find and process all shout candidates for each enabled timeslot and each product   */
     timeslots.each { timeslot ->
       products.each { product ->
+        Turnover turnover
 
         /** set unique transactionId for clearing this particular timeslot and product    */
         String transactionId = IdGenerator.createId()
@@ -150,7 +153,8 @@ class AuctionService implements Auctioneer,
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!turnover?.executableVolume || !turnover?.price) log.error("Turnover did not contain information on executable volume and / or price.")
+        if (!turnover?.executableVolume || !turnover?.price) log.error("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
+        log.debug "Price for product ${product} and timeslot ${timeslot}: ${turnover?.price}"
 
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
@@ -179,6 +183,7 @@ class AuctionService implements Auctioneer,
 
           /**  create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList */
           clearedTradeList << new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume)
+
 
           /** Todo: asd*/
         }
@@ -398,7 +403,6 @@ class AuctionService implements Auctioneer,
       latestOrderbook.setOrderbookArray(newOrderbookArray)
 
       latestOrderbook.timeslot.addToOrderbooks(latestOrderbook)
-      latestOrderbook.product.addToOrderbooks(latestOrderbook)
 
       if (!latestOrderbook.save() ) log.error("Failed to save updated orderbook: ${latestOrderbook.errors} (cascading save)")
 

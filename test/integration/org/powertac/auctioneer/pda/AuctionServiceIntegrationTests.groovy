@@ -64,7 +64,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
     sampleProduct = ProductType.Future
-    assert (sampleProduct.save())
+    //assert (sampleProduct.save())
     // set up some timeslots
     def ts = new Timeslot(serialNumber: 3,
             startInstant: new Instant(now.millis - TimeService.HOUR),
