@@ -23,7 +23,7 @@ import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
 import org.powertac.common.exceptions.ShoutCreationException
 import org.powertac.common.exceptions.ShoutDeletionException
-//import org.powertac.common.Product
+import org.powertac.common.enumerations.ProductType
 import org.powertac.common.enumerations.BuySellIndicator
 import org.powertac.common.MarketTransaction
 import org.powertac.common.enumerations.MarketTransactionType
@@ -121,7 +121,7 @@ class AuctionService implements Auctioneer,
 
   void clearMarket() {
 
-    def products = Product.findAll()
+    products = ProductType.values()
     def timeslots = Timeslot.findAllByEnabled(true)
     Turnover turnover
     def clearedTradeList = []
