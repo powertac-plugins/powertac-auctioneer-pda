@@ -22,6 +22,7 @@ import org.joda.time.DateTime
 import org.joda.time.DateTimeZone
 import org.powertac.common.Broker
 //import org.powertac.common.Product
+
 import org.powertac.common.Timeslot
 import org.powertac.common.enumerations.ProductType
 import org.powertac.common.enumerations.BuySellIndicator
@@ -160,7 +161,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull b1.transactionId
   }
 
-  /*
+
   void testSimpleAskAndBidEntryInEmptyOrderbook() {
 
     buyShout.quantity = 50
@@ -179,25 +180,34 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook ob = auctionService.updateOrderbook(sellShout)
 
     //validate
-    assertEquals(buyShout.limitPrice, ob.bid0)
-    assertEquals(buyShout.quantity, ob.bidSize0)
+    assertEquals(buyShout.limitPrice, ob.bids.first().limitPrice)
+    assertEquals(buyShout.quantity, ob.bids.first().quantity)
 
-    assertEquals(sellShout.limitPrice, ob.ask0)
-    assertEquals(sellShout.quantity, ob.askSize0)
+    assertEquals(sellShout.limitPrice, ob.asks.first().limitPrice)
+    assertEquals(sellShout.quantity, ob.asks.first().quantity)
 
-    assertNull(ob.bid1)
-    assertEquals(0, ob.bidSize1)
-    assertNull(ob.ask1)
-    assertEquals(0, ob.askSize1)
+    assertEquals(1, ob.asks.size())
+    assertEquals(1, ob.bids.size())
+
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+
+    assertEquals(buyShout.limitPrice, persistedOb.bids.first().limitPrice)
+    assertEquals(buyShout.quantity, persistedOb.bids.first().quantity)
+
+    assertEquals(sellShout.limitPrice, persistedOb.asks.first().limitPrice)
+    assertEquals(sellShout.quantity, persistedOb.asks.first().quantity)
+
+    assertEquals(1, persistedOb.asks.size())
+    assertEquals(1, persistedOb.bids.size())
+
     println "Size Ob: ${Orderbook.findAllByTimeslot(sampleTimeslot).size()}"
     def trace = AuditLogEvent.findAllByClassNameAndPersistedObjectId(persistedOb.getClass().getName(), persistedOb.id)
     trace.each { println "Log ${it.className} ${it.persistedObjectId}, prop:${it.propertyName} was ${it.oldValue}, now ${it.newValue}" }
 
-  }*/
+  }
 
-  /** Incoming shout (bid) adds quantity to existing price level                */
+  /** Incoming shout (bid) adds quantity to existing price level                 */
   /*
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
@@ -507,22 +517,21 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     // brokerProxy for AccountingService
     def messages = [:]
     def proxy =
-      [sendMessage: {broker, message ->
-        if (messages[broker] == null) {
-          messages[broker] = []
-        }
-        messages[broker] << message
-      },
-      sendMessages: {broker, messageList ->
-        if (messages[broker] == null) {
-          messages[broker] = []
-        }
-        messageList.each { message ->
-          messages[broker] << message
-        }
-      }] as BrokerProxy
+    [sendMessage: {broker, message ->
+      if (messages[broker] == null) {
+        messages[broker] = []
+      }
+      messages[broker] << message
+    },
+            sendMessages: {broker, messageList ->
+              if (messages[broker] == null) {
+                messages[broker] = []
+              }
+              messageList.each { message ->
+                messages[broker] << message
+              }
+            }] as BrokerProxy
     accountingService.brokerProxyService = proxy
-
 
     //init
     sellShout.limitPrice = 11.0
