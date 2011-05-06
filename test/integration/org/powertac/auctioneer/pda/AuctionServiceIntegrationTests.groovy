@@ -207,8 +207,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   }
 
-  /** Incoming shout (bid) adds quantity to existing price level                 */
-  /*
+  /** Incoming shout (bid) adds quantity to existing price level                     */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
@@ -231,48 +230,105 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook ob = auctionService.updateOrderbook(buyShout2)
 
     //validate
-    assertEquals(buyShout2.limitPrice, ob.bid0)
-    assertEquals((buyShout.quantity + buyShout2.quantity), ob.bidSize0)
+    OrderbookEntry bestBid = ob.bids.first()
+    assertEquals(buyShout2.limitPrice, bestBid.limitPrice)
+    assertEquals((buyShout.quantity + buyShout2.quantity), bestBid.quantity)
+    assertEquals(1, ob.bids.size())
 
-    assertNull(ob.bid1)
-    assertEquals(0, ob.bidSize1)
+    OrderbookEntry bestAsk = ob.asks.first()
+    assertEquals(sellShout.limitPrice, bestAsk.limitPrice)
+    assertEquals(sellShout.quantity, bestAsk.quantity)
+    assertEquals(1, ob.asks.size())
 
-    assertEquals(sellShout.limitPrice, ob.ask0)
-    assertEquals(sellShout.quantity, ob.askSize0)
+    Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
 
-    assertNull(ob.ask1)
-    assertEquals(0, ob.askSize1)
-  } */
+    OrderbookEntry bestPersistedBid = persistedOb.bids.first()
+    assertEquals(buyShout2.limitPrice, bestPersistedBid.limitPrice)
+    assertEquals((buyShout.quantity + buyShout2.quantity), bestPersistedBid.quantity)
+    assertEquals(1, persistedOb.bids.size())
+
+    OrderbookEntry bestPersistedAsk = persistedOb.asks.first()
+    assertEquals(sellShout.limitPrice, bestPersistedAsk.limitPrice)
+    assertEquals(sellShout.quantity, bestPersistedAsk.quantity)
+    assertEquals(1, persistedOb.asks.size())
+  }
 
   void testProcessOfIncomingShoutSequenceConcerningOrderbookUpdateAndShoutPersistence() {
-    //init + action
     sellShout.limitPrice = 13.0
     sellShout.quantity = 10.0
     auctionService.processShout(sellShout)
 
-    //Orderbook firstPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    OrderbookEntry bestAsk = persistedOb.asks.first()
+    assertNotNull(persistedOb)
+    assertEquals(13.0, bestAsk.limitPrice)
+    assertEquals(10.0, bestAsk.quantity)
+    assertEquals(1, persistedOb.asks.size())
+    assertEquals(0, persistedOb.bids.size())
 
     buyShout.limitPrice = 10.0
     buyShout.quantity = 10.0
     auctionService.processShout(buyShout)
 
-    //Orderbook secondPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    bestAsk = persistedOb.asks.first()
+    OrderbookEntry bestBid = persistedOb.bids.first()
+    assertNotNull(persistedOb)
+    assertEquals(13.0, bestAsk.limitPrice)
+    assertEquals(10.0, bestAsk.quantity)
+    assertEquals(1, persistedOb.asks.size())
+
+    assertEquals(10.0, bestBid.limitPrice)
+    assertEquals(10.0, bestBid.quantity)
+    assertEquals(1, persistedOb.bids.size())
+
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 12.0
     sellShout2.quantity = 20
     auctionService.processShout(sellShout2)
 
-    //Orderbook thirdPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    bestAsk = persistedOb.asks.first()
+    bestBid = persistedOb.bids.first()
+    def iter = persistedOb.asks.iterator()
+    iter.next()
+    OrderbookEntry secondBestAsk = iter.next()
+    assertNotNull(persistedOb)
+    assertEquals(12.0, bestAsk.limitPrice)
+    assertEquals(20.0, bestAsk.quantity)
+    assertEquals(13.0, secondBestAsk.limitPrice)
+    assertEquals(10.0, secondBestAsk.quantity)
+    assertEquals(2, persistedOb.asks.size())
+
+    assertEquals(10.0, bestBid.limitPrice)
+    assertEquals(10.0, bestBid.quantity)
+    assertEquals(1, persistedOb.bids.size())
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 10.0
     buyShout2.quantity = 30.0
     auctionService.processShout(buyShout2)
 
-    //Orderbook fourthPersistedOb = new Orderbook(Orderbook.findByProductAndTimeslot(sampleProduct, sampleTimeslot).properties)
+    persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    bestAsk = persistedOb.asks.first()
+    bestBid = persistedOb.bids.first()
+    iter = persistedOb.asks.iterator()
+    iter.next()
+    secondBestAsk = iter.next()
 
-    //validate
+    assertNotNull(persistedOb)
+    assertEquals(12.0, bestAsk.limitPrice)
+    assertEquals(20.0, bestAsk.quantity)
+    assertEquals(13.0, secondBestAsk.limitPrice)
+    assertEquals(10.0, secondBestAsk.quantity)
+    assertEquals(2, persistedOb.asks.size())
+
+    assertEquals(10.0, bestBid.limitPrice)
+    assertEquals(40.0, bestBid.quantity)
+    assertEquals(1, persistedOb.bids.size())
+
+    //validate Shouts
     assertEquals(4, Shout.list().size())
     List persistedShouts = []
 
@@ -308,52 +364,6 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
       assertEquals(ModReasonCode.INSERT, shout.modReasonCode)
       assertNotNull shout.transactionId
     }
-    /*
-    assertNotNull(firstPersistedOb)
-    assertEquals(13.0, firstPersistedOb.ask0)
-    assertEquals(10.0, firstPersistedOb.askSize0)
-    assertNull(firstPersistedOb.bid0)
-    assertEquals(0.0, firstPersistedOb.bidSize0)
-    assertNull(firstPersistedOb.bid1)
-    assertEquals(0.0, firstPersistedOb.bidSize1)
-    assertNull(firstPersistedOb.ask1)
-    assertEquals(0.0, firstPersistedOb.askSize1)
-
-    assertNotNull(secondPersistedOb)
-    assertEquals(13.0, secondPersistedOb.ask0)
-    assertEquals(10.0, secondPersistedOb.askSize0)
-    assertEquals(10.0, secondPersistedOb.bid0)
-    assertEquals(10.0, secondPersistedOb.bidSize0)
-    assertNotNull(secondPersistedOb)
-    assertNull(secondPersistedOb.bid1)
-    assertEquals(0.0, secondPersistedOb.bidSize1)
-    assertNull(secondPersistedOb.ask1)
-    assertEquals(0.0, secondPersistedOb.askSize1)
-
-    assertNotNull(thirdPersistedOb)
-    assertEquals(12.0, thirdPersistedOb.ask0)
-    assertEquals(20.0, thirdPersistedOb.askSize0)
-    assertEquals(10.0, thirdPersistedOb.bid0)
-    assertEquals(10.0, thirdPersistedOb.bidSize0)
-    assertNull(thirdPersistedOb.bid1)
-    assertEquals(0.0, thirdPersistedOb.bidSize1)
-    assertEquals(13.0, thirdPersistedOb.ask1)
-    assertEquals(10.0, thirdPersistedOb.askSize1)
-    assertNull(thirdPersistedOb.ask2)
-    assertEquals(0.0, thirdPersistedOb.askSize2)
-
-    assertNotNull(fourthPersistedOb)
-    assertEquals(12.0, fourthPersistedOb.ask0)
-    assertEquals(20.0, fourthPersistedOb.askSize0)
-    assertEquals(10.0, fourthPersistedOb.bid0)
-    assertEquals(40.0, fourthPersistedOb.bidSize0)
-    assertNull(fourthPersistedOb.bid1)
-    assertEquals(0.0, fourthPersistedOb.bidSize1)
-    assertEquals(13.0, fourthPersistedOb.ask1)
-    assertEquals(10.0, fourthPersistedOb.askSize1)
-    assertNull(thirdPersistedOb.ask2)
-    assertEquals(0.0, thirdPersistedOb.askSize2)
-    */
   }
 
 
@@ -593,7 +603,26 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     //assertEquals(-110.0, mpBuyer.broker.cash.overallBalance)
     //assertEquals(110.0, mpSeller.broker.cash.overallBalance)
 
-    /* Todo Public information */
+    Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
+    def iter = persistedOb.bids.iterator()
+    def bestBid = iter.next()
+    def secondBestBid = iter.next()
+    def bestAsk = persistedOb.asks.first()
+
+    assertEquals(11.0, bestAsk.limitPrice)
+    assertEquals(20.0, bestAsk.quantity)
+    assertEquals(1, persistedOb.asks.size())
+
+    assertEquals(11.0, bestBid.limitPrice)
+    assertEquals(10.0, bestBid.quantity)
+    assertEquals(2.0, secondBestBid.limitPrice)
+    assertEquals(10.0, secondBestBid.quantity)
+    assertEquals(2, persistedOb.bids.size())
+
+    ClearedTrade persistedCt = ClearedTrade.findByTimeslot(sampleTimeslot)
+    assertNotNull(persistedCt)
+    assertEquals(11.0, persistedCt.executionPrice)
+    assertEquals(10.0, persistedCt.executionQuantity)
   }
 
   /* Todo: Test market clearing and settlement in more complex situations*/

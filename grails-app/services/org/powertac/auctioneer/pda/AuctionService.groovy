@@ -112,9 +112,9 @@ org.springframework.beans.factory.InitializingBean {
       log.error incomingShout.errors.each { it.toString() }
     }
 
-    /** Refactor updateOrderbook() according to new design
-     Orderbook updatedOrderbook = updateOrderbook(incomingShout)
-     if (updatedOrderbook) {if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}}*/
+
+     updateOrderbook(incomingShout)
+     //if (updatedOrderbook) {if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}}
   }
 
 
@@ -132,6 +132,14 @@ org.springframework.beans.factory.InitializingBean {
 
         /** set unique transactionId for clearing this particular timeslot and product     */
         String transactionId = IdGenerator.createId()
+
+        /** take snapshot of orderbook before matching and append it to orderbookList */
+        Orderbook ob = Orderbook.findByTimeslot(timeslot)
+        if (ob) {
+          ob.transactionId = transactionId
+          if (!ob.save()) "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
+          orderbookList << ob
+        }
 
         /** find candidates that have to be cleared for this timeslot    */
         def candidates = Shout.withCriteria {
@@ -153,7 +161,7 @@ org.springframework.beans.factory.InitializingBean {
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!turnover?.executableVolume || !turnover?.price) log.error("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
+        if (!turnover?.executableVolume || !turnover?.price) log.info("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
         log.debug "Price for product ${product} and timeslot ${timeslot}: ${turnover?.price}"
 
         if (candidates?.size() < 1) {
@@ -182,7 +190,9 @@ org.springframework.beans.factory.InitializingBean {
           if (aggregQuantityAsk != aggregQuantityBid) log.error "Clearing: aggregQuantityAsk does not equal aggregQuantityBid for ${timeslot} and product ${product}"
 
           /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList  */
-          clearedTradeList << new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume)
+          ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
+          if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
+          clearedTradeList << ct
 
           /** find left over shouts that have to be cancelled    */
           def remaining = Shout.withCriteria {
@@ -201,6 +211,7 @@ org.springframework.beans.factory.InitializingBean {
     }
 
     reportPublicInformation(clearedTradeList)
+    reportPublicInformation(orderbookList)
     //Todo: Broadcast orderbook information to brokers
     //reportPublicInformation(orderbookList)
   }
