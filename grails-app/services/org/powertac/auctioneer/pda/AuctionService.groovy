@@ -121,7 +121,7 @@ class AuctionService implements Auctioneer,
 
   void clearMarket() {
 
-    products = ProductType.values()
+    def products = ProductType.values()
     def timeslots = Timeslot.findAllByEnabled(true)
     Turnover turnover
     def clearedTradeList = []

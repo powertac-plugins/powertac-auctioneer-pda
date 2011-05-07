@@ -14,6 +14,7 @@ web-app/WEB-INF/classes/
 ehthumbs.db
 Icon?
 Thumbs.db
+*.log
 
 # Compiled source
 *.class
