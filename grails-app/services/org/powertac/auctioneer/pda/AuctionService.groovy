@@ -36,6 +36,8 @@ import org.powertac.common.interfaces.BrokerProxy
 import org.powertac.common.PluginConfig
 import org.powertac.common.interfaces.CompetitionControl
 import org.joda.time.Instant
+import org.powertac.common.enumerations.ProductType
+import org.powertac.common.OrderbookEntry
 
 /**
  * Implementation of {@link org.powertac.common.interfaces.Auctioneer}
@@ -44,9 +46,9 @@ import org.joda.time.Instant
  */
 
 class AuctionService implements Auctioneer,
-                                org.powertac.common.interfaces.BrokerMessageListener,
-                                org.powertac.common.interfaces.TimeslotPhaseProcessor,
-                                org.springframework.beans.factory.InitializingBean {
+org.powertac.common.interfaces.BrokerMessageListener,
+org.powertac.common.interfaces.TimeslotPhaseProcessor,
+org.springframework.beans.factory.InitializingBean {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
@@ -60,9 +62,9 @@ class AuctionService implements Auctioneer,
   int simulationPhase = 2
 
   /**
-  * Register for phase 2 activation, to drive tariff publication
-  */
-  void afterPropertiesSet () {
+   * Register for phase 2 activation, to drive wholesale market funcitonality
+   */
+  void afterPropertiesSet() {
     competitionControlService?.registerTimeslotPhase(this, simulationPhase)
     brokerProxyService?.registerBrokerMarketListener(this)
   }
@@ -72,8 +74,7 @@ class AuctionService implements Auctioneer,
    * Receives incoming broker message
    */
   @Override
-  public void receiveMessage (msg)
-  {
+  public void receiveMessage(msg) {
     // dispatch incoming message
     if (msg instanceof Shout) {
       log.info "Processing incoming shout from BrokerProxy: ${msg}"
@@ -98,7 +99,7 @@ class AuctionService implements Auctioneer,
   /**
    * Process incoming shout: validate submitted shout and add to market's orderbook.
    * Add serverside properties: modReasonCode, transactionId, (comment)s
-   * Update the orderbook and persist shout    */
+   * Update the orderbook and persist shout     */
   void processShout(Shout incomingShout) {
     if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
 
@@ -111,11 +112,9 @@ class AuctionService implements Auctioneer,
       log.error incomingShout.errors.each { it.toString() }
     }
 
-    Orderbook updatedOrderbook = updateOrderbook(incomingShout)
-    if (updatedOrderbook) {
-      if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}
-      // Todo: Broadcast orderbook information to brokers
-    }
+
+     updateOrderbook(incomingShout)
+     //if (updatedOrderbook) {if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}}
   }
 
 
@@ -123,69 +122,98 @@ class AuctionService implements Auctioneer,
 
     def products = ProductType.values()
     def timeslots = Timeslot.findAllByEnabled(true)
-    Turnover turnover
     def clearedTradeList = []
+    def orderbookList = []
 
-    /** find and process all shout candidates for each enabled timeslot and each product   */
+    /** find and process all shout candidates for each enabled timeslot and each product    */
     timeslots.each { timeslot ->
       products.each { product ->
+        Turnover turnover
 
-        /** set unique transactionId for clearing this particular timeslot and product    */
+        /** set unique transactionId for clearing this particular timeslot and product     */
         String transactionId = IdGenerator.createId()
 
-        /** find candidates that have to be cleared for this timeslot   */
+        /** take snapshot of orderbook before matching and append it to orderbookList */
+        Orderbook ob = Orderbook.findByTimeslot(timeslot)
+        if (ob) {
+          ob.transactionId = transactionId
+          if (!ob.save()) "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
+          orderbookList << ob
+        }
+
+        /** find candidates that have to be cleared for this timeslot    */
         def candidates = Shout.withCriteria {
           eq('product', product)
           eq('timeslot', timeslot)
+          eq('modReasonCode', ModReasonCode.INSERT)
         }
 
-        /** calculate uniform execution price for following clearing   */
+        println "size1 ${candidates.size()}"
+
+        /** calculate uniform execution price for following clearing    */
         if (candidates?.size() >= 1) {
           turnover = calcUniformPrice(candidates)
         } else {
           log.info "No Shouts found for uniform price calculation."
         }
 
-        /** split candidates list in sorte bid and ask lists   */
+        /** split candidates list in sorte bid and ask lists    */
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!turnover?.executableVolume || !turnover?.price) log.error("Turnover did not contain information on executable volume and / or price.")
+        if (!turnover?.executableVolume || !turnover?.price) log.info("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
+        log.debug "Price for product ${product} and timeslot ${timeslot}: ${turnover?.price}"
 
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
         } else {
-          /** Determine bids (asks) that are above (below) the determined execution price   */
+          /** Determine bids (asks) that are above (below) the determined execution price    */
           bids = bids.findAll {it.limitPrice >= turnover.price}
           asks = asks.findAll {it.limitPrice <= turnover.price}
 
           BigDecimal aggregQuantityBid = 0.0
           BigDecimal aggregQuantityAsk = 0.0
 
-          /** Allocate all single bids equal/above the execution price   */
+          /** Allocate all single bids equal/above the execution price    */
           Iterator bidIterator = bids.iterator()
           while (bidIterator.hasNext() && aggregQuantityBid < turnover.executableVolume) {
             aggregQuantityBid = allocateSingleShout(bidIterator.next(), aggregQuantityBid, turnover, transactionId)
           }
 
-          /** Allocate all single asks equal/below the execution price   */
+          /** Allocate all single asks equal/below the execution price    */
           Iterator askIterator = asks.iterator()
           while (askIterator.hasNext() && aggregQuantityAsk < turnover.executableVolume) {
             aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
           }
 
-          /** matched quantity of bids must equal matched quantity of asks */
+          /** matched quantity of bids must equal matched quantity of asks  */
           if (aggregQuantityAsk != aggregQuantityBid) log.error "Clearing: aggregQuantityAsk does not equal aggregQuantityBid for ${timeslot} and product ${product}"
 
-          /**  create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList */
-          clearedTradeList << new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume)
+          /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList  */
+          ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
+          if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
+          clearedTradeList << ct
 
-          /** Todo: asd*/
+          /** find left over shouts that have to be cancelled    */
+          def remaining = Shout.withCriteria {
+            eq('product', product)
+            eq('timeslot', timeslot)
+            eq('modReasonCode', ModReasonCode.INSERT)
+          }
+          if (remaining) {
+            remaining.each {shout ->
+              shout.modReasonCode = ModReasonCode.DELETIONBYSYSTEM
+              if (!shout.save()) log.error "Failed to save cancelled unmatched shout ${shout}"
+            }
+          }
         }
       }
     }
 
     reportPublicInformation(clearedTradeList)
+    reportPublicInformation(orderbookList)
+    //Todo: Broadcast orderbook information to brokers
+    //reportPublicInformation(orderbookList)
   }
 
   /**
@@ -215,7 +243,7 @@ class AuctionService implements Auctioneer,
       turnover.price = (BigDecimal) price
       turnovers << turnover
     }
-    /** Turnover implement comparable interface and are sorted according to max executable volume and then min surplus */
+    /** Turnover implement comparable interface and are sorted according to max executable volume and then min surplus  */
     Turnover maxTurnover = turnovers?.first()
     if (maxTurnover) {
       return maxTurnover
@@ -260,9 +288,9 @@ class AuctionService implements Auctioneer,
     allocatedShout.comment = "Matched by org.powertac.auctioneer.pda"
     if (!allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
 
-    /** Settlement: reporting market transaction to accountingService    */
-    def settlementQuantity = (allocatedShout.buySellIndicator==BuySellIndicator.BUY)? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
-    def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY)? -allocatedShout.executionPrice : allocatedShout.executionPrice
+    /** Settlement: reporting market transaction to accountingService     */
+    def settlementQuantity = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
+    def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? -allocatedShout.executionPrice : allocatedShout.executionPrice
     accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
 
     aggregQuantityAllocated += allocatedShout.executionQuantity
@@ -272,139 +300,62 @@ class AuctionService implements Auctioneer,
   /**
    * Send list of public information, i.e. list of clearedTrade or Orderbook instances to BrokerProxy
    *    *
-   * @param List<E> - list of clearedTrade or Orderbook instances containing all public information about latest clearing
+   * @param List < E >  - list of clearedTrade or Orderbook instances containing all public information about latest clearing
    */
-
   private void reportPublicInformation(List publicInformation) {
     brokerProxyService?.broadcastMessages(publicInformation)
   }
 
   /*
   * Update the orderbook after processing a shout.
-  * Get top ten bids and asks from database and update the Orderbook object.
   *
   * @param shout - processed Shout that may lead to orderbook update
   *
-  * @return latestOrderbook - updated orderbook that holds the top ten bids/asks and corresponding quantities
+  * @return ob - updated orderbook that holds bids/asks and corresponding quantities
   */
 
   private Orderbook updateOrderbook(Shout shout) {
-
-    Orderbook latestOrderbook = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
+    /** check if there is an existing orderbook else create new one */
+    Orderbook ob = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
     }
 
-    if (!latestOrderbook) {
-      latestOrderbook = new Orderbook()  //create new orderbook
+    if (!ob) {
+      ob = new Orderbook()  //create new orderbook
+      ob.product = shout.product
+      ob.timeslot = shout.timeslot
+      ob.transactionId = shout.transactionId
+      ob.dateExecuted = new Instant()
     }
 
-    def bestAsks = Shout.withCriteria() {
-      eq('product', shout.product)
-      eq('timeslot', shout.timeslot)
-      eq('buySellIndicator', BuySellIndicator.SELL)
-      maxResults(10)
-      order('limitPrice', 'asc')
+    OrderbookEntry oe
 
-      projections {
-        groupProperty('limitPrice')
-        sum('quantity')
-      }
+    /** check if price level does already exist in orderbook  */
+    if (shout.buySellIndicator == BuySellIndicator.BUY) {
+      oe = ob.bids?.find {it -> it.limitPrice == shout.limitPrice}
+    } else {
+      oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
     }
 
-    def bestBids = Shout.withCriteria() {
-      eq('product', shout.product)
-      eq('timeslot', shout.timeslot)
-      eq('buySellIndicator', BuySellIndicator.BUY)
-      maxResults(10)
-      order('limitPrice', 'desc')
-
-      projections {
-        groupProperty('limitPrice')
-        sum('quantity')
-      }
+    /** if price level does not exist, initialize new OrderbookEntry  */
+    if (!oe) {
+      oe = new OrderbookEntry(limitPrice: shout.limitPrice, quantity: 0)
     }
 
-    BigDecimal[][][] newOrderbookArray = new BigDecimal[2][2][10]
-    BigDecimal[][][] latestOrderbookArray = latestOrderbook.getOrderbookArray()
-    Boolean orderbookChangeFound = false
-    Integer levelCounter = 0
+    /** update/initialize orderbookEntry  */
+    oe.quantity += shout.quantity
+    oe.buySellIndicator = shout.buySellIndicator
 
-    if (bestBids.size() == 0) { //no open bid orders left
-      if (latestOrderbook.bid0 != null) {
-        orderbookChangeFound = true //empty bid orderbook is new situation if latestOrderbook contained bid
-      }
-    }
-    else {
-      //BID: check if new orderbook entry && create newOrderbookArray
-      levelCounter = 0
-      while (levelCounter <= 9) {
-        //create newOrderbookArray bid entry
-        if (bestBids[levelCounter]) {
-          newOrderbookArray[0][0][levelCounter] = bestBids[levelCounter][0] //price
-          newOrderbookArray[0][1][levelCounter] = bestBids[levelCounter][1] //size
-        } else {
-          //fill empty levels (in case of deletion this is necessary)
-          newOrderbookArray[0][0][levelCounter] = null
-          newOrderbookArray[0][1][levelCounter] = 0.0
-        }
-
-        //changed?
-        if (!orderbookChangeFound && !(latestOrderbookArray[0][0][levelCounter] == newOrderbookArray[0][0][levelCounter] && latestOrderbookArray[0][1][levelCounter] == newOrderbookArray[0][1][levelCounter])) {
-          orderbookChangeFound = true
-        }
-        levelCounter++
-      }
+    ob.timeslot.addToOrderbooks(ob)
+    if (oe.buySellIndicator == BuySellIndicator.BUY) {
+      ob.addToBids(oe)
+    } else {
+      ob.addToAsks(oe)
     }
 
-    //no open ask orders left
-    if (bestAsks.size() == 0) {
-      //empty ask orderbook is new situation
-      if (latestOrderbook.ask0 != null) {
-        orderbookChangeFound = true
-      }
-    }
-    else {
-      //ASK: check if new orderbook entry && create newOrderbookArray
-      levelCounter = 0
-
-      while (levelCounter <= 9) {
-        //create newOrderbookArray bid entry
-        if (bestAsks[levelCounter]) {
-          newOrderbookArray[1][0][levelCounter] = bestAsks[levelCounter][0] //price
-          newOrderbookArray[1][1][levelCounter] = bestAsks[levelCounter][1] //size
-        } else {
-          //fill empty levels (in case of deletion this is necessary)
-          newOrderbookArray[1][0][levelCounter] = null
-          newOrderbookArray[1][1][levelCounter] = 0.0
-        }
-
-        //changed?
-        if (!orderbookChangeFound && !(latestOrderbookArray[1][0][levelCounter] == newOrderbookArray[1][0][levelCounter] && latestOrderbookArray[1][1][levelCounter] == newOrderbookArray[1][1][levelCounter])) {
-          orderbookChangeFound = true
-        }
-        levelCounter++
-
-      }
-    }
-
-    //If there are changes found create new orderbook entry
-    if (orderbookChangeFound) {
-
-      latestOrderbook.product = shout.product
-      latestOrderbook.timeslot = shout.timeslot
-      latestOrderbook.transactionId = shout.transactionId
-      latestOrderbook.dateExecuted = shout.dateMod
-      latestOrderbook.setOrderbookArray(newOrderbookArray)
-
-      latestOrderbook.timeslot.addToOrderbooks(latestOrderbook)
-      latestOrderbook.product.addToOrderbooks(latestOrderbook)
-
-      if (!latestOrderbook.save() ) log.error("Failed to save updated orderbook: ${latestOrderbook.errors} (cascading save)")
-
-      return latestOrderbook
-    }
-    return null
+    if (!ob.save()) log.error "Failed to save orderbook: ${ob.errors}"
+    return ob
   }
 
   /**

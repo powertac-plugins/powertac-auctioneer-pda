@@ -54,7 +54,7 @@ class AuditLoggingTests extends GrailsUnitTestCase {
     sampleBuyer = new Broker(username: "SampleBuyer")
     assert (sampleBuyer.save())
     sampleProduct = ProductType.Future
-    assert (sampleProduct.save())
+    //assert (sampleProduct.save())
     sampleTimeslot = new Timeslot(serialNumber: 1, enabled: true, startInstant: new Instant(), endInstant: new Instant())
     assert (sampleTimeslot.validate())
     assert (sampleTimeslot.save())
