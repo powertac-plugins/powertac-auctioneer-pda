@@ -52,6 +52,7 @@ class AuctionService implements Auctioneer,
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
 
+  def timeService
   def accountingService
   BrokerProxy brokerProxyService
   CompetitionControl competitionControlService
@@ -134,10 +135,13 @@ class AuctionService implements Auctioneer,
 
         /** take snapshot of orderbook before matching and append it to orderbookList */
         Orderbook ob = Orderbook.findByTimeslot(timeslot)
-        if (ob) {
-          ob.transactionId = transactionId
-          if (!ob.save()) log.error "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
+        if (!ob) {
+          ob = new Orderbook(timeslot: timeslot, product: product, dateExecuted: timeService.currentTime)
+          timeslot.addToOrderbooks(ob)
         }
+        ob.transactionId = transactionId
+        if (!ob.save()) log.error "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
+
 
         /** find candidates that have to be cleared for this timeslot    */
         def candidates = Shout.withCriteria {
@@ -328,7 +332,7 @@ class AuctionService implements Auctioneer,
       ob.product = shout.product
       ob.timeslot = shout.timeslot
       ob.transactionId = shout.transactionId
-      ob.dateExecuted = new Instant()
+      ob.dateExecuted = timeService.currentTime
     }
 
     OrderbookEntry oe

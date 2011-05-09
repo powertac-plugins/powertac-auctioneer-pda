@@ -625,5 +625,18 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, persistedCt.executionQuantity)
   }
 
+  void testClearingWithoutShouts() {
+    auctionService.clearMarket()
+
+    Orderbook ob = Orderbook.findByTimeslot(sampleTimeslot)
+    assertNotNull(ob)
+    assertEquals(0, ob.asks.size())
+    assertEquals(0, ob.bids.size())
+
+    ClearedTrade ct = ClearedTrade.findByTimeslot(sampleTimeslot)
+    assertNull(ct)
+
+  }
+
   /* Todo: Test market clearing and settlement in more complex situations*/
 }
