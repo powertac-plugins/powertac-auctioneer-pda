@@ -46,9 +46,8 @@ import org.powertac.common.OrderbookEntry
  */
 
 class AuctionService implements Auctioneer,
-org.powertac.common.interfaces.BrokerMessageListener,
-org.powertac.common.interfaces.TimeslotPhaseProcessor,
-org.springframework.beans.factory.InitializingBean {
+                                org.powertac.common.interfaces.BrokerMessageListener,
+                                org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
@@ -64,7 +63,8 @@ org.springframework.beans.factory.InitializingBean {
   /**
    * Register for phase 2 activation, to drive wholesale market funcitonality
    */
-  void afterPropertiesSet() {
+  void init (PluginConfig config)
+  {
     competitionControlService?.registerTimeslotPhase(this, simulationPhase)
     brokerProxyService?.registerBrokerMarketListener(this)
   }
@@ -79,8 +79,7 @@ org.springframework.beans.factory.InitializingBean {
     if (msg instanceof Shout) {
       log.info "Processing incoming shout from BrokerProxy: ${msg}"
       processShout(msg)
-      //Todo: do we send a confirmation status msg to broker?
-      //brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
+      //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
     } else {
       brokerProxyService.sendMessage(msg.broker, "No valid object")
     }
@@ -194,7 +193,7 @@ org.springframework.beans.factory.InitializingBean {
           if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
           clearedTradeList << ct
 
-          /** find left over shouts that have to be cancelled    */
+          /** find unmatched shouts that have to be cancelled  */
           def remaining = Shout.withCriteria {
             eq('product', product)
             eq('timeslot', timeslot)
@@ -212,8 +211,6 @@ org.springframework.beans.factory.InitializingBean {
 
     reportPublicInformation(clearedTradeList)
     reportPublicInformation(orderbookList)
-    //Todo: Broadcast orderbook information to brokers
-    //reportPublicInformation(orderbookList)
   }
 
   /**
