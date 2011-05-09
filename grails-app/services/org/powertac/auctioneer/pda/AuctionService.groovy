@@ -136,8 +136,7 @@ class AuctionService implements Auctioneer,
         Orderbook ob = Orderbook.findByTimeslot(timeslot)
         if (ob) {
           ob.transactionId = transactionId
-          if (!ob.save()) "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
-          orderbookList << ob
+          if (!ob.save()) log.error "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
         }
 
         /** find candidates that have to be cleared for this timeslot    */
@@ -189,9 +188,15 @@ class AuctionService implements Auctioneer,
           if (aggregQuantityAsk != aggregQuantityBid) log.error "Clearing: aggregQuantityAsk does not equal aggregQuantityBid for ${timeslot} and product ${product}"
 
           /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList  */
-          ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
-          if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
-          clearedTradeList << ct
+          if (turnover?.executableVolume && turnover?.price) {
+            ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
+            if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
+            clearedTradeList << ct
+            ob.clearingPrice = turnover.price
+            if (!ob.save()) log.error "Failed to save Orderbook with clearingPrice after matching: ${ob.errors} "
+          }
+
+          orderbookList << ob
 
           /** find unmatched shouts that have to be cancelled  */
           def remaining = Shout.withCriteria {
