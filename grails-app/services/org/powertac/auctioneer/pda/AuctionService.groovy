@@ -64,7 +64,7 @@ class AuctionService implements Auctioneer,
   /**
    * Register for phase 2 activation, to drive wholesale market funcitonality
    */
-  void init (PluginConfig config)
+  void init()
   {
     competitionControlService?.registerTimeslotPhase(this, simulationPhase)
     brokerProxyService?.registerBrokerMarketListener(this)
@@ -78,7 +78,7 @@ class AuctionService implements Auctioneer,
   public void receiveMessage(msg) {
     // dispatch incoming message
     if (msg instanceof Shout) {
-      log.info "Processing incoming shout from BrokerProxy: ${msg}"
+      log.debug "Processing incoming shout from BrokerProxy: ${msg}"
       processShout(msg)
       //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
     } else {
@@ -110,6 +110,8 @@ class AuctionService implements Auctioneer,
     if (!incomingShout.save()) {
       log.error("Failed to create shout: ${incomingShout.errors}")
       log.error incomingShout.errors.each { it.toString() }
+    } else {
+      log.debug "Successfully processed shout: ${incomingShout}"
     }
 
 
@@ -120,6 +122,8 @@ class AuctionService implements Auctioneer,
 
   void clearMarket() {
 
+    log.debug "Starting to clear the market"
+
     def products = ProductType.values()
     def timeslots = Timeslot.findAllByEnabled(true)
     def clearedTradeList = []
@@ -129,7 +133,7 @@ class AuctionService implements Auctioneer,
     timeslots.each { timeslot ->
       products.each { product ->
         Turnover turnover
-
+        log.debug "Starting to clear product: ${product} for timeslot ${timeslot}"
         /** set unique transactionId for clearing this particular timeslot and product     */
         String transactionId = IdGenerator.createId()
 
@@ -220,6 +224,8 @@ class AuctionService implements Auctioneer,
 
     reportPublicInformation(clearedTradeList)
     reportPublicInformation(orderbookList)
+
+    log.debug "Ended clearing process in the wholesale market"
   }
 
   /**
@@ -254,7 +260,7 @@ class AuctionService implements Auctioneer,
     if (maxTurnover) {
       return maxTurnover
     } else {
-      log.info "No maximum turnover found during uniform price calculation"
+      log.debug "No maximum turnover found during uniform price calculation"
       return null
     }
 
@@ -360,7 +366,11 @@ class AuctionService implements Auctioneer,
       ob.addToAsks(oe)
     }
 
-    if (!ob.save()) log.error "Failed to save orderbook: ${ob.errors}"
+    if (!ob.save()) {
+      log.error "Failed to save orderbook: ${ob.errors}"
+    } else {
+      log.debug "Succesfully saved orderbook: ${ob}"
+    }
     return ob
   }
 

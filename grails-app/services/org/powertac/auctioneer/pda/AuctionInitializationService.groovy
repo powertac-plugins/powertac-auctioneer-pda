@@ -41,6 +41,7 @@ class AuctionInitializationService implements InitializationService {
     }
     else {
       auctionService.configuration = auctioneer
+      auctionService.init()
       return 'Auctioneer'
     }
     return 'fail'
