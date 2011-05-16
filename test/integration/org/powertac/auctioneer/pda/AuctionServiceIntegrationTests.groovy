@@ -32,6 +32,7 @@ import org.powertac.common.Orderbook
 import org.powertac.common.*
 import org.codehaus.groovy.grails.plugins.orm.auditable.AuditLogEvent
 import org.powertac.common.interfaces.BrokerProxy
+import com.sun.org.apache.xpath.internal.operations.Mod
 
 /**
  * Testing the auctionService
@@ -43,6 +44,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   Instant start
   def sampleTimeslot
+  def futureTimeslot
   def sampleProduct
   def sampleSeller
   def sampleBuyer
@@ -82,10 +84,15 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
             enabled: true)
     assert (sampleTimeslot.validate())
     assert (sampleTimeslot.save())
-    ts = new Timeslot(serialNumber: 6,
+    futureTimeslot = new Timeslot(serialNumber: 6,
             startInstant: new Instant(now.millis + TimeService.HOUR * 2),
             endInstant: new Instant(now.millis + TimeService.HOUR * 3),
             enabled: true)
+    assert (futureTimeslot.save())
+    ts = new Timeslot(serialNumber: 7,
+            startInstant: new Instant(now.millis + TimeService.HOUR * 3),
+            endInstant: new Instant(now.millis + TimeService.HOUR * 4),
+            enabled: false)
     assert (ts.save())
 
 
@@ -97,6 +104,17 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   protected void tearDown() {
     super.tearDown()
+  }
+
+  void simulateTransition() {
+    /** Simulate transition to next round: enable/disable timeslots  */
+    Timeslot enabledTs = Timeslot.findBySerialNumber(7)
+
+    sampleTimeslot.enabled = false
+    assert (sampleTimeslot.save())
+
+    enabledTs.enabled = true
+    assert (enabledTs.save())
   }
 
   void testIncomingSellShout() {
@@ -207,7 +225,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   }
 
-  /** Incoming shout (bid) adds quantity to existing price level                     */
+  /** Incoming shout (bid) adds quantity to existing price level                      */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
     buyShout.quantity = 50
@@ -636,6 +654,285 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     ClearedTrade ct = ClearedTrade.findByTimeslot(sampleTimeslot)
     assertNull(ct)
 
+  }
+
+  void testProcessShoutForDisabledTimeslot() {
+    Timeslot ts = Timeslot.findBySerialNumber(3)
+    buyShout.timeslot = ts
+    buyShout.limitPrice = 1.0
+    buyShout.quantity = 2.0
+
+    auctionService.processShout(buyShout)
+
+    /** assert that invalid shout was not persisted  */
+    assertEquals(0, Shout.list().size())
+  }
+
+  void testMultipleClearingRoundsAndBiddingJustForSingleRound() {
+    /** Round 1 */
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
+
+    buyShout2.limitPrice = 2.0
+    buyShout2.quantity = 10.0
+    auctionService.processShout(buyShout2)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    // Validate persisted obejcts
+    assertEquals(3, Shout.list().size())
+
+    Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 11.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
+    }
+    assertNotNull(s3)
+    assertEquals(BuySellIndicator.SELL, s3.buySellIndicator)
+    assertEquals(10.0, s3.executionQuantity)
+    assertEquals(11.0, s3.executionPrice)
+
+    Shout s4 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 11.0)
+      eq('quantity', 0.0)
+      eq('modReasonCode', ModReasonCode.EXECUTION)
+    }
+    assertNotNull(s4)
+    assertEquals(BuySellIndicator.BUY, s4.buySellIndicator)
+    assertEquals(10.0, s4.executionQuantity)
+    assertEquals(11.0, s4.executionPrice)
+
+    Shout s5 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 2.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.DELETIONBYSYSTEM)
+    }
+    assertNotNull(s5)
+    assertEquals(BuySellIndicator.BUY, s5.buySellIndicator)
+
+    assertEquals(1, ClearedTrade.list().size())
+    ClearedTrade persistedCt = ClearedTrade.findByTimeslot(sampleTimeslot)
+    assertNotNull(persistedCt)
+    assertEquals(11.0, persistedCt.executionPrice)
+    assertEquals(10.0, persistedCt.executionQuantity)
+
+    simulateTransition()
+
+    /** Round 2  */
+    Timeslot secondTs = Timeslot.findBySerialNumber(6)
+
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    sellShout.timeslot = secondTs
+    auctionService.processShout(sellShout)
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    buyShout.timeslot = secondTs
+    auctionService.processShout(buyShout)
+
+    buyShout2.limitPrice = 2.0
+    buyShout2.quantity = 10.0
+    buyShout2.timeslot = secondTs
+    auctionService.processShout(buyShout2)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    Shout s7 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', secondTs)
+      eq('limitPrice', 11.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
+    }
+    assertNotNull(s7)
+    assertEquals(BuySellIndicator.SELL, s7.buySellIndicator)
+    assertEquals(10.0, s7.executionQuantity)
+    assertEquals(11.0, s7.executionPrice)
+
+    Shout s8 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', secondTs)
+      eq('limitPrice', 11.0)
+      eq('quantity', 0.0)
+      eq('modReasonCode', ModReasonCode.EXECUTION)
+    }
+    assertNotNull(s8)
+    assertEquals(BuySellIndicator.BUY, s8.buySellIndicator)
+    assertEquals(10.0, s8.executionQuantity)
+    assertEquals(11.0, s8.executionPrice)
+
+    Shout s9 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', secondTs)
+      eq('limitPrice', 2.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.DELETIONBYSYSTEM)
+    }
+    assertNotNull(s9)
+    assertEquals(BuySellIndicator.BUY, s9.buySellIndicator)
+
+    assertEquals(2, ClearedTrade.list().size())
+    ClearedTrade secondCt = ClearedTrade.findByTimeslot(secondTs)
+    assertNotNull(secondCt)
+    assertEquals(11.0, secondCt.executionPrice)
+    assertEquals(10.0, secondCt.executionQuantity)
+  }
+
+
+  void testMultipleClearingRoundsAndBiddingForMultipleRounds() {
+    /** Round 1 */
+
+    /** bids for next enabled timeslot (serialnumber 5)*/
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
+
+    buyShout2.limitPrice = 10.0
+    buyShout2.quantity = 10.0
+    auctionService.processShout(buyShout2)
+
+    /** bids for future enabled timeslot (serialnumber 6)*/
+    Timeslot ts = Timeslot.findBySerialNumber(6)
+
+    sellShout.timeslot = ts
+    auctionService.processShout(sellShout)
+    buyShout.timeslot = ts
+    auctionService.processShout(buyShout)
+    buyShout2.timeslot = ts
+    auctionService.processShout(buyShout2)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    // Validate persisted obejcts
+    assertEquals(6, Shout.list().size())
+
+    Shout s3 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 11.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
+    }
+    assertNotNull(s3)
+    assertEquals(BuySellIndicator.SELL, s3.buySellIndicator)
+    assertEquals(10.0, s3.executionQuantity)
+    assertEquals(11.0, s3.executionPrice)
+
+    Shout s4 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 11.0)
+      eq('quantity', 0.0)
+      eq('modReasonCode', ModReasonCode.EXECUTION)
+    }
+    assertNotNull(s4)
+    assertEquals(BuySellIndicator.BUY, s4.buySellIndicator)
+    assertEquals(10.0, s4.executionQuantity)
+    assertEquals(11.0, s4.executionPrice)
+
+    Shout s5 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', sampleTimeslot)
+      eq('limitPrice', 10.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.DELETIONBYSYSTEM)
+    }
+    assertNotNull(s5)
+    assertEquals(BuySellIndicator.BUY, s5.buySellIndicator)
+
+    Shout s7 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', ts)
+      eq('limitPrice', 11.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.PARTIALEXECUTION)
+    }
+    assertNotNull(s7)
+    assertEquals(BuySellIndicator.SELL, s7.buySellIndicator)
+    assertEquals(10.0, s7.executionQuantity)
+    assertEquals(11.0, s7.executionPrice)
+
+    Shout s8 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', ts)
+      eq('limitPrice', 11.0)
+      eq('quantity', 0.0)
+      eq('modReasonCode', ModReasonCode.EXECUTION)
+    }
+    assertNotNull(s8)
+    assertEquals(BuySellIndicator.BUY, s8.buySellIndicator)
+    assertEquals(10.0, s8.executionQuantity)
+    assertEquals(11.0, s8.executionPrice)
+
+    Shout s9 = (Shout) Shout.withCriteria(uniqueResult: true) {
+      eq('timeslot', ts)
+      eq('limitPrice', 10.0)
+      eq('quantity', 10.0)
+      eq('modReasonCode', ModReasonCode.DELETIONBYSYSTEM)
+    }
+    assertNotNull(s9)
+    assertEquals(BuySellIndicator.BUY, s9.buySellIndicator)
+
+    assertEquals(2, ClearedTrade.list().size())
+
+    ClearedTrade persistedCt = ClearedTrade.findByTimeslot(sampleTimeslot)
+    assertNotNull(persistedCt)
+    assertEquals(11.0, persistedCt.executionPrice)
+    assertEquals(10.0, persistedCt.executionQuantity)
+
+    ClearedTrade secondCt = ClearedTrade.findByTimeslot(ts)
+    assertNotNull(secondCt)
+    assertEquals(11.0, secondCt.executionPrice)
+    assertEquals(10.0, secondCt.executionQuantity)
+  }
+
+  void testShoutDeletionBetweenRoundsForFutureBuyShout() {
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    sellShout.timeslot = futureTimeslot
+    auctionService.processShout(sellShout)
+
+    auctionService.activate(timeService.currentTime, 3)
+    simulateTransition()
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    buyShout.timeslot = futureTimeslot
+    auctionService.processShout(sellShout)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    assertEquals(2, Shout.list().size())
+    Shout.list().collect {it -> assertEquals(ModReasonCode.DELETIONBYSYSTEM, it.modReasonCode)}
+
+    assertEquals(0, ClearedTrade.list().size())
+  }
+
+  void testShoutDeletionBetweenRoundsForFutureSellShout() {
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    buyShout.timeslot = futureTimeslot
+    auctionService.processShout(buyShout)
+
+    auctionService.activate(timeService.currentTime, 3)
+    simulateTransition()
+
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    sellShout.timeslot = futureTimeslot
+    auctionService.processShout(sellShout)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    assertEquals(2, Shout.list().size())
+    Shout.list().collect {it -> assertEquals(ModReasonCode.DELETIONBYSYSTEM, it.modReasonCode)}
+
+    assertEquals(0, ClearedTrade.list().size())
   }
 
   /* Todo: Test market clearing and settlement in more complex situations*/

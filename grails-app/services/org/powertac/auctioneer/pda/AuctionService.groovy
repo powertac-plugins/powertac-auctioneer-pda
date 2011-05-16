@@ -18,25 +18,22 @@ package org.powertac.auctioneer.pda
 
 import org.powertac.common.interfaces.Auctioneer
 import org.powertac.common.Shout
-import org.powertac.common.Competition
+
 import org.powertac.common.enumerations.ModReasonCode
 import org.powertac.common.IdGenerator
-import org.powertac.common.exceptions.ShoutCreationException
-import org.powertac.common.exceptions.ShoutDeletionException
+
 import org.powertac.common.enumerations.ProductType
 import org.powertac.common.enumerations.BuySellIndicator
-import org.powertac.common.MarketTransaction
-import org.powertac.common.enumerations.MarketTransactionType
-import org.powertac.common.enumerations.OrderType
+
 import org.powertac.common.Timeslot
-import org.powertac.common.exceptions.ShoutUpdateException
+
 import org.powertac.common.Orderbook
 import org.powertac.common.ClearedTrade
 import org.powertac.common.interfaces.BrokerProxy
 import org.powertac.common.PluginConfig
 import org.powertac.common.interfaces.CompetitionControl
 import org.joda.time.Instant
-import org.powertac.common.enumerations.ProductType
+
 import org.powertac.common.OrderbookEntry
 
 /**
@@ -46,8 +43,8 @@ import org.powertac.common.OrderbookEntry
  */
 
 class AuctionService implements Auctioneer,
-                                org.powertac.common.interfaces.BrokerMessageListener,
-                                org.powertac.common.interfaces.TimeslotPhaseProcessor {
+org.powertac.common.interfaces.BrokerMessageListener,
+org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
@@ -64,8 +61,7 @@ class AuctionService implements Auctioneer,
   /**
    * Register for phase 2 activation, to drive wholesale market funcitonality
    */
-  void init()
-  {
+  void init() {
     competitionControlService?.registerTimeslotPhase(this, simulationPhase)
     brokerProxyService?.registerBrokerMarketListener(this)
   }
@@ -99,24 +95,32 @@ class AuctionService implements Auctioneer,
   /**
    * Process incoming shout: validate submitted shout and add to market's orderbook.
    * Add serverside properties: modReasonCode, transactionId, (comment)s
-   * Update the orderbook and persist shout     */
+   * Update the orderbook and persist shout      */
   void processShout(Shout incomingShout) {
-    if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
 
-    incomingShout.transactionId = IdGenerator.createId()
-    incomingShout.modReasonCode = ModReasonCode.INSERT
+     /** check if incoming shout is valid (timeslot, product) */
+    if (incomingShout.timeslot.enabled && incomingShout.product == ProductType.Future && incomingShout.quantity && incomingShout.limitPrice) {
+      Shout shout = new Shout(incomingShout.properties)
+      shout.transactionId = IdGenerator.createId()
+      shout.modReasonCode = ModReasonCode.INSERT
 
+      /** persist incoming shout with market annotations (transactionId / modReasonCode) */
+      if (!shout.save()) {
+        log.error("Failed to create shout: ${shout.errors}")
+        log.error shout.errors.each { it.toString() }
+      } else {
+        log.debug "Successfully processed shout: ${shout}"
+      }
 
-    if (!incomingShout.save()) {
-      log.error("Failed to create shout: ${incomingShout.errors}")
-      log.error incomingShout.errors.each { it.toString() }
+      /** updated the orderbook */
+      updateOrderbook(shout)
+
     } else {
-      log.debug "Successfully processed shout: ${incomingShout}"
+      /** hook to implement feedback for brokers concerning invalid shouts */
+      log.info ("Incoming shout was invalid: ${incomingShout}")
+      if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
     }
 
-
-     updateOrderbook(incomingShout)
-     //if (updatedOrderbook) {if (!updatedOrderbook.save()) {log.error "Failed to save orderbook: ${incomingShout.errors}"}}
   }
 
 
@@ -129,15 +133,15 @@ class AuctionService implements Auctioneer,
     def clearedTradeList = []
     def orderbookList = []
 
-    /** find and process all shout candidates for each enabled timeslot and each product    */
+    /** find and process all shout candidates for each enabled timeslot and each product     */
     timeslots.each { timeslot ->
       products.each { product ->
         Turnover turnover
         log.debug "Starting to clear product: ${product} for timeslot ${timeslot}"
-        /** set unique transactionId for clearing this particular timeslot and product     */
+        /** set unique transactionId for clearing this particular timeslot and product      */
         String transactionId = IdGenerator.createId()
 
-        /** take snapshot of orderbook before matching and append it to orderbookList */
+        /** take snapshot of orderbook before matching and append it to orderbookList  */
         Orderbook ob = Orderbook.findByTimeslot(timeslot)
         if (!ob) {
           ob = new Orderbook(timeslot: timeslot, product: product, dateExecuted: timeService.currentTime)
@@ -146,8 +150,7 @@ class AuctionService implements Auctioneer,
         ob.transactionId = transactionId
         if (!ob.save()) log.error "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
 
-
-        /** find candidates that have to be cleared for this timeslot    */
+        /** find candidates that have to be cleared for this timeslot     */
         def candidates = Shout.withCriteria {
           eq('product', product)
           eq('timeslot', timeslot)
@@ -156,14 +159,14 @@ class AuctionService implements Auctioneer,
 
         println "size1 ${candidates.size()}"
 
-        /** calculate uniform execution price for following clearing    */
+        /** calculate uniform execution price for following clearing     */
         if (candidates?.size() >= 1) {
           turnover = calcUniformPrice(candidates)
         } else {
           log.info "No Shouts found for uniform price calculation."
         }
 
-        /** split candidates list in sorte bid and ask lists    */
+        /** split candidates list in sorte bid and ask lists     */
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
@@ -173,29 +176,29 @@ class AuctionService implements Auctioneer,
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
         } else {
-          /** Determine bids (asks) that are above (below) the determined execution price    */
+          /** Determine bids (asks) that are above (below) the determined execution price     */
           bids = bids.findAll {it.limitPrice >= turnover.price}
           asks = asks.findAll {it.limitPrice <= turnover.price}
 
           BigDecimal aggregQuantityBid = 0.0
           BigDecimal aggregQuantityAsk = 0.0
 
-          /** Allocate all single bids equal/above the execution price    */
+          /** Allocate all single bids equal/above the execution price     */
           Iterator bidIterator = bids.iterator()
           while (bidIterator.hasNext() && aggregQuantityBid < turnover.executableVolume) {
             aggregQuantityBid = allocateSingleShout(bidIterator.next(), aggregQuantityBid, turnover, transactionId)
           }
 
-          /** Allocate all single asks equal/below the execution price    */
+          /** Allocate all single asks equal/below the execution price     */
           Iterator askIterator = asks.iterator()
           while (askIterator.hasNext() && aggregQuantityAsk < turnover.executableVolume) {
             aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
           }
 
-          /** matched quantity of bids must equal matched quantity of asks  */
+          /** matched quantity of bids must equal matched quantity of asks   */
           if (aggregQuantityAsk != aggregQuantityBid) log.error "Clearing: aggregQuantityAsk does not equal aggregQuantityBid for ${timeslot} and product ${product}"
 
-          /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList  */
+          /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList   */
           if (turnover?.executableVolume && turnover?.price) {
             ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
             if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
@@ -206,7 +209,7 @@ class AuctionService implements Auctioneer,
 
           orderbookList << ob
 
-          /** find unmatched shouts that have to be cancelled  */
+          /** find unmatched shouts that have to be cancelled   */
           def remaining = Shout.withCriteria {
             eq('product', product)
             eq('timeslot', timeslot)
@@ -255,7 +258,7 @@ class AuctionService implements Auctioneer,
       turnover.price = (BigDecimal) price
       turnovers << turnover
     }
-    /** Turnover implement comparable interface and are sorted according to max executable volume and then min surplus  */
+    /** Turnover implement comparable interface and are sorted according to max executable volume and then min surplus   */
     Turnover maxTurnover = turnovers?.first()
     if (maxTurnover) {
       return maxTurnover
@@ -300,7 +303,7 @@ class AuctionService implements Auctioneer,
     allocatedShout.comment = "Matched by org.powertac.auctioneer.pda"
     if (!allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
 
-    /** Settlement: reporting market transaction to accountingService     */
+    /** Settlement: reporting market transaction to accountingService      */
     def settlementQuantity = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
     def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? -allocatedShout.executionPrice : allocatedShout.executionPrice
     accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
@@ -327,7 +330,7 @@ class AuctionService implements Auctioneer,
   */
 
   private Orderbook updateOrderbook(Shout shout) {
-    /** check if there is an existing orderbook else create new one */
+    /** check if there is an existing orderbook else create new one  */
     Orderbook ob = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
@@ -343,19 +346,19 @@ class AuctionService implements Auctioneer,
 
     OrderbookEntry oe
 
-    /** check if price level does already exist in orderbook  */
+    /** check if price level does already exist in orderbook   */
     if (shout.buySellIndicator == BuySellIndicator.BUY) {
       oe = ob.bids?.find {it -> it.limitPrice == shout.limitPrice}
     } else {
       oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
     }
 
-    /** if price level does not exist, initialize new OrderbookEntry  */
+    /** if price level does not exist, initialize new OrderbookEntry   */
     if (!oe) {
       oe = new OrderbookEntry(limitPrice: shout.limitPrice, quantity: 0)
     }
 
-    /** update/initialize orderbookEntry  */
+    /** update/initialize orderbookEntry   */
     oe.quantity += shout.quantity
     oe.buySellIndicator = shout.buySellIndicator
 
