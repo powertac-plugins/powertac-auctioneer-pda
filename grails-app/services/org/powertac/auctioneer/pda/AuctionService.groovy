@@ -76,7 +76,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     if (msg instanceof Shout) {
       log.debug "Processing incoming shout from BrokerProxy: ${msg}"
       processShout(msg)
-      //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
+    //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
     } else {
       brokerProxyService.sendMessage(msg.broker, "No valid object")
     }
@@ -305,7 +305,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     /** Settlement: reporting market transaction to accountingService      */
     def settlementQuantity = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
-    def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? -allocatedShout.executionPrice : allocatedShout.executionPrice
+    def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionPrice : -allocatedShout.executionPrice
     accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
 
     aggregQuantityAllocated += allocatedShout.executionQuantity
