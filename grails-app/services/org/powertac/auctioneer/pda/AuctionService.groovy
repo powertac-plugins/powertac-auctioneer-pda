@@ -157,7 +157,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
           eq('modReasonCode', ModReasonCode.INSERT)
         }
 
-        println "size1 ${candidates.size()}"
+        log.debug "size1 ${candidates.size()}"
 
         /** calculate uniform execution price for following clearing     */
         if (candidates?.size() >= 1) {
