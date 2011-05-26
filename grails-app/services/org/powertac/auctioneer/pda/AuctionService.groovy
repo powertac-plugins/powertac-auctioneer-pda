@@ -162,7 +162,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         /** calculate uniform execution price for following clearing     */
         if (candidates?.size() >= 1) {
           turnover = calcUniformPrice(candidates)
-        } else {
+        } 
+        else {
           log.info "No Shouts found for uniform price calculation."
         }
 
