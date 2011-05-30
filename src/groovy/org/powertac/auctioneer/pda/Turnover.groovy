@@ -44,14 +44,6 @@ class Turnover implements Comparable {
     return Math.min(Math.max(0.0, aggregatedQuantityAsk), Math.max(0.0, aggregatedQuantityBid))
   }
 
-  private void setSurplus(BigDecimal surplus) {
-    //do nothing, method just prevents generation of a public setter
-  }
-
-  public BigDecimal getSurplus() {
-    return Math.max(Math.max(0.0, aggregatedQuantityAsk), Math.max(0.0, aggregatedQuantityBid)) - getExecutableVolume()
-  }
-
   public int hashCode() {
     return new HashCodeBuilder(17, 37).
             append(this.executableVolume).
@@ -64,7 +56,6 @@ class Turnover implements Comparable {
     Turnover other = (Turnover) o
     return new EqualsBuilder().
             append(other?.executableVolume, this?.executableVolume).
-            append(this?.surplus, other?.surplus).
             isEquals()
   }
 
@@ -73,7 +64,6 @@ class Turnover implements Comparable {
     Turnover other = (Turnover) o
     return new CompareToBuilder().
             append(other?.executableVolume, this?.executableVolume).
-            append(this?.surplus, other?.surplus).
             toComparison();
   }
 

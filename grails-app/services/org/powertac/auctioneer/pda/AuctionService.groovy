@@ -76,7 +76,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     if (msg instanceof Shout) {
       log.debug "Processing incoming shout from BrokerProxy: ${msg}"
       processShout(msg)
-    //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
+      //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
     } else {
       brokerProxyService.sendMessage(msg.broker, "No valid object")
     }
@@ -95,16 +95,16 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   /**
    * Process incoming shout: validate submitted shout and add to market's orderbook.
    * Add serverside properties: modReasonCode, transactionId, (comment)s
-   * Update the orderbook and persist shout      */
+   * Update the orderbook and persist shout        */
   void processShout(Shout incomingShout) {
 
-     /** check if incoming shout is valid (timeslot, product) */
+    /** check if incoming shout is valid (timeslot, product)   */
     if (incomingShout.timeslot.enabled && incomingShout.product == ProductType.Future && incomingShout.quantity && incomingShout.limitPrice) {
       Shout shout = new Shout(incomingShout.properties)
       shout.transactionId = IdGenerator.createId()
       shout.modReasonCode = ModReasonCode.INSERT
 
-      /** persist incoming shout with market annotations (transactionId / modReasonCode) */
+      /** persist incoming shout with market annotations (transactionId / modReasonCode)   */
       if (!shout.save()) {
         log.error("Failed to create shout: ${shout.errors}")
         log.error shout.errors.each { it.toString() }
@@ -112,12 +112,12 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         log.debug "Successfully processed shout: ${shout}"
       }
 
-      /** updated the orderbook */
+      /** updated the orderbook   */
       updateOrderbook(shout)
 
     } else {
-      /** hook to implement feedback for brokers concerning invalid shouts */
-      log.info ("Incoming shout was invalid: ${incomingShout}")
+      /** hook to implement feedback for brokers concerning invalid shouts   */
+      log.info("Incoming shout was invalid: ${incomingShout}")
       if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
     }
 
@@ -133,15 +133,15 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     def clearedTradeList = []
     def orderbookList = []
 
-    /** find and process all shout candidates for each enabled timeslot and each product     */
+    /** find and process all shout candidates for each enabled timeslot and each product       */
     timeslots.each { timeslot ->
       products.each { product ->
         Turnover turnover
         log.debug "Starting to clear product: ${product} for timeslot ${timeslot}"
-        /** set unique transactionId for clearing this particular timeslot and product      */
+        /** set unique transactionId for clearing this particular timeslot and product        */
         String transactionId = IdGenerator.createId()
 
-        /** take snapshot of orderbook before matching and append it to orderbookList  */
+        /** take snapshot of orderbook before matching and append it to orderbookList    */
         Orderbook ob = Orderbook.findByTimeslot(timeslot)
         if (!ob) {
           ob = new Orderbook(timeslot: timeslot, product: product, dateExecuted: timeService.currentTime)
@@ -150,7 +150,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         ob.transactionId = transactionId
         if (!ob.save()) log.error "Failed to save Orderbook with clearing-transactionId: ${ob.errors} "
 
-        /** find candidates that have to be cleared for this timeslot     */
+        /** find candidates that have to be cleared for this timeslot       */
         def candidates = Shout.withCriteria {
           eq('product', product)
           eq('timeslot', timeslot)
@@ -159,15 +159,15 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
         log.debug "size1 ${candidates.size()}"
 
-        /** calculate uniform execution price for following clearing     */
+        /** calculate uniform execution price for following clearing       */
         if (candidates?.size() >= 1) {
           turnover = calcUniformPrice(candidates)
-        } 
+        }
         else {
           log.info "No Shouts found for uniform price calculation."
         }
 
-        /** split candidates list in sorte bid and ask lists     */
+        /** split candidates list in sorte bid and ask lists       */
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
@@ -177,29 +177,29 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         if (candidates?.size() < 1) {
           log.info "No Shouts found for allocation."
         } else {
-          /** Determine bids (asks) that are above (below) the determined execution price     */
+          /** Determine bids (asks) that are above (below) the determined execution price       */
           bids = bids.findAll {it.limitPrice >= turnover.price}
           asks = asks.findAll {it.limitPrice <= turnover.price}
 
           BigDecimal aggregQuantityBid = 0.0
           BigDecimal aggregQuantityAsk = 0.0
 
-          /** Allocate all single bids equal/above the execution price     */
+          /** Allocate all single bids equal/above the execution price       */
           Iterator bidIterator = bids.iterator()
           while (bidIterator.hasNext() && aggregQuantityBid < turnover.executableVolume) {
             aggregQuantityBid = allocateSingleShout(bidIterator.next(), aggregQuantityBid, turnover, transactionId)
           }
 
-          /** Allocate all single asks equal/below the execution price     */
+          /** Allocate all single asks equal/below the execution price       */
           Iterator askIterator = asks.iterator()
           while (askIterator.hasNext() && aggregQuantityAsk < turnover.executableVolume) {
             aggregQuantityAsk = allocateSingleShout(askIterator.next(), aggregQuantityAsk, turnover, transactionId)
           }
 
-          /** matched quantity of bids must equal matched quantity of asks   */
+          /** matched quantity of bids must equal matched quantity of asks     */
           if (aggregQuantityAsk != aggregQuantityBid) log.error "Clearing: aggregQuantityAsk does not equal aggregQuantityBid for ${timeslot} and product ${product}"
 
-          /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList   */
+          /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList     */
           if (turnover?.executableVolume && turnover?.price) {
             ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
             if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
@@ -210,7 +210,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
           orderbookList << ob
 
-          /** find unmatched shouts that have to be cancelled   */
+          /** find unmatched shouts that have to be cancelled     */
           def remaining = Shout.withCriteria {
             eq('product', product)
             eq('timeslot', timeslot)
@@ -249,17 +249,31 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     /** Iterate over all submitted limit prices in order to find price that maximizes execution volume.
      *  Order turnovers of different prices in SortedSet turnovers
+     *  Stop if turnover is decreasing between two iterations
      */
-    prices.each {price ->
+    Boolean maxTurnoverFound = false;
+    Iterator itr = prices.iterator()
+
+    while (itr.hasNext() && !maxTurnoverFound) {
       Turnover turnover = new Turnover()
+      def price = itr.next()
       def matchingBids = shouts.findAll {it.buySellIndicator == BuySellIndicator.BUY && it.limitPrice >= price}
       def matchingAsks = shouts.findAll {it.buySellIndicator == BuySellIndicator.SELL && it.limitPrice <= price}
       turnover.aggregatedQuantityBid = matchingBids?.size() > 0 ? (BigDecimal) matchingBids.sum {it.quantity} : 0.0
       turnover.aggregatedQuantityAsk = matchingAsks?.size() > 0 ? (BigDecimal) matchingAsks.sum {it.quantity} : 0.0
       turnover.price = (BigDecimal) price
-      turnovers << turnover
+
+      if (turnovers.size() == 0 || turnovers?.first() <= turnover) {
+        turnovers << turnover
+      } else {
+        maxTurnoverFound = true
+      }
     }
-    /** Turnover implement comparable interface and are sorted according to max executable volume and then min surplus   */
+
+    /** Turnover implement comparable interface and are sorted according to max executable volume
+     *  Todo: If there are more than one turnover with equal executionQuantities the midpoint is set as the clearing price
+     *  Currently the maximum price for equal turnovers is set as the clearing price
+     * */
     Turnover maxTurnover = turnovers?.first()
     if (maxTurnover) {
       return maxTurnover
@@ -304,7 +318,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     allocatedShout.comment = "Matched by org.powertac.auctioneer.pda"
     if (!allocatedShout.save()) "Failed to save allocated Shout: ${allocatedShout.errors}"
 
-    /** Settlement: reporting market transaction to accountingService      */
+    /** Settlement: reporting market transaction to accountingService        */
     def settlementQuantity = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
     def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionPrice : -allocatedShout.executionPrice
     accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
@@ -331,7 +345,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   */
 
   private Orderbook updateOrderbook(Shout shout) {
-    /** check if there is an existing orderbook else create new one  */
+    /** check if there is an existing orderbook else create new one    */
     Orderbook ob = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
       eq('timeslot', shout.timeslot)
@@ -347,19 +361,19 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     OrderbookEntry oe
 
-    /** check if price level does already exist in orderbook   */
+    /** check if price level does already exist in orderbook     */
     if (shout.buySellIndicator == BuySellIndicator.BUY) {
       oe = ob.bids?.find {it -> it.limitPrice == shout.limitPrice}
     } else {
       oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
     }
 
-    /** if price level does not exist, initialize new OrderbookEntry   */
+    /** if price level does not exist, initialize new OrderbookEntry     */
     if (!oe) {
       oe = new OrderbookEntry(limitPrice: shout.limitPrice, quantity: 0)
     }
 
-    /** update/initialize orderbookEntry   */
+    /** update/initialize orderbookEntry     */
     oe.quantity += shout.quantity
     oe.buySellIndicator = shout.buySellIndicator
 
