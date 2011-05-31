@@ -464,7 +464,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(80.0, turnover.aggregatedQuantityBid)
   }
 
-  void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMinimalSurplus() {
+  void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMidpointPrice() {
     //init
     sellShout.limitPrice = 11.0
     sellShout.quantity = 20.0
@@ -494,7 +494,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
-    assertEquals(12.0, turnover.price)
+    assertEquals(11.5, turnover.price)
     assertEquals(20.0, turnover.executableVolume)
     assertEquals(20.0, turnover.aggregatedQuantityAsk)
     assertEquals(40.0, turnover.aggregatedQuantityBid)

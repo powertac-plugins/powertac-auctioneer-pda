@@ -48,6 +48,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
+  public static final DescTurnoverComparator = [compare: {Turnover a, Turnover b -> a.executableVolume.equals(b.executableVolume) ? (a.price < b.price ? 1 : -1) : a.executableVolume < b.executableVolume ? 1 : -1}] as Comparator
 
   def timeService
   def accountingService
@@ -244,7 +245,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     log.debug("Pricing shouts with uniform pricing...");
 
-    SortedSet<Turnover> turnovers = new TreeSet<Turnover>()
+    TreeSet<Turnover> turnovers = new TreeSet<Turnover>(DescTurnoverComparator)
     def prices = shouts.collect {it.limitPrice}.unique()
 
     /** Iterate over all submitted limit prices in order to find price that maximizes execution volume.
@@ -275,7 +276,26 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
      *  Currently the maximum price for equal turnovers is set as the clearing price
      * */
     Turnover maxTurnover = turnovers?.first()
+
+
     if (maxTurnover) {
+      def turnoverItr = turnovers.iterator()
+      BigDecimal minEquilibriumPrice = maxTurnover.price
+      Turnover minPriceMaxTurnover = turnoverItr.next()
+      Boolean endOfTurnoversReached = false
+
+      if (turnoverItr.hasNext()) {minPriceMaxTurnover = turnoverItr.next()}
+
+      while (!endOfTurnoversReached && minPriceMaxTurnover.equals(maxTurnover)) {
+        minEquilibriumPrice = minPriceMaxTurnover.price
+        if (turnoverItr.hasNext()) {
+          minPriceMaxTurnover = turnoverItr.next()
+        } else {
+          endOfTurnoversReached = true
+        }
+      }
+
+      maxTurnover.price = (maxTurnover.price + minEquilibriumPrice)/2
       return maxTurnover
     } else {
       log.debug "No maximum turnover found during uniform price calculation"
