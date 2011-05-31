@@ -47,7 +47,6 @@ class Turnover implements Comparable {
   public int hashCode() {
     return new HashCodeBuilder(17, 37).
             append(this.executableVolume).
-            append(this.surplus).
             toHashCode();
   }
 
@@ -62,9 +61,7 @@ class Turnover implements Comparable {
   public int compareTo(Object o) {
     if (!o instanceof Turnover) return 1
     Turnover other = (Turnover) o
-    return new CompareToBuilder().
-            append(other?.executableVolume, this?.executableVolume).
-            toComparison();
+    return this.executableVolume.equals(other.executableVolume) ? 0 : this.executableVolume < other.executableVolume ? -1 : 1
   }
 
 

@@ -16,6 +16,8 @@
 
 package org.powertac.auctioneer.pda
 
+import org.apache.commons.lang.builder.CompareToBuilder
+
 class TurnoverTests extends GroovyTestCase {
 
   protected void setUp() {
@@ -51,42 +53,17 @@ class TurnoverTests extends GroovyTestCase {
     assertEquals(0, t1.getExecutableVolume())
   }
 
-  void testGetSurplus() {
-    Turnover t1 = new Turnover(price: 1.0, aggregatedQuantityAsk: 20.0, aggregatedQuantityBid: 25.0)
-    assertEquals(5.0, t1.getSurplus())
-    t1.aggregatedQuantityBid = 15.0
-    assertEquals(5.0, t1.getSurplus())
-    t1.aggregatedQuantityBid = 0.0
-    assertEquals(20.0, t1.getSurplus())
-    t1.aggregatedQuantityBid = -50.0
-    assertEquals(20, t1.getSurplus())
-  }
-
   void testSorting() {
-    Turnover t1 = new Turnover(price: 1.0, aggregatedQuantityAsk: 20.0, aggregatedQuantityBid: 25.0)
-    Turnover t2 = new Turnover(price: 1.0, aggregatedQuantityAsk: 20.0, aggregatedQuantityBid: 25.0)
+    Turnover t1 = new Turnover(price: 2.0, aggregatedQuantityAsk: 0.0, aggregatedQuantityBid: 20.0)
+    Turnover t2 = new Turnover(price: 11.0, aggregatedQuantityAsk: 20.0, aggregatedQuantityBid: 10.0)
+    Turnover t3 = new Turnover(price: 11.0, aggregatedQuantityAsk: 20.0, aggregatedQuantityBid: 25.0)
 
-    assertEquals(0, t1.compareTo(t2))
-    t2.price = 1.5d
-    assertEquals(0, t1.compareTo(t2))
-
-    t1.aggregatedQuantityAsk = 25
-    assertEquals(-1, t1.compareTo(t2))
-    assertEquals(1, t2.compareTo(t1))
     def list = [t1, t2].sort()
-    assertEquals(t1, list[0])
+    def list2 = [t2, t3].sort()
 
-    t2.aggregatedQuantityAsk = 25
-    assertEquals(0, t1.compareTo(t2))
-
-    t2.aggregatedQuantityAsk = 26
-    assertEquals(-1, t1.compareTo(t2))
-    list.sort()
-    assertEquals(t1, list[0])
-
-    t2.aggregatedQuantityBid = 26
-    list.sort()
-    assertEquals(t2, list[0])
+    assertEquals(t2, list.last())
+    assertEquals(t3, list2.last())
+    //assertEquals(0, t1.compareTo(t2))
 
   }
 }
