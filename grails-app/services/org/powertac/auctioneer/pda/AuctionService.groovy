@@ -244,8 +244,6 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   public Turnover calcUniformPrice(List<Shout> shouts) {
 
     log.debug("Pricing shouts with uniform pricing...");
-
-    TreeSet<Turnover> turnovers = new TreeSet<Turnover>(DescTurnoverComparator)
     def prices = shouts.collect {it.limitPrice}.unique()
 
     /** Iterate over all submitted limit prices in order to find price that maximizes execution volume.
@@ -254,49 +252,40 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
      */
     Boolean maxTurnoverFound = false;
     Iterator itr = prices.iterator()
+    Turnover minEquilibriumTurnover
+    Turnover maxEquilibriumTurnover
 
     while (itr.hasNext() && !maxTurnoverFound) {
       Turnover turnover = new Turnover()
-      def price = itr.next()
+      BigDecimal price = (BigDecimal) itr.next()
       def matchingBids = shouts.findAll {it.buySellIndicator == BuySellIndicator.BUY && it.limitPrice >= price}
       def matchingAsks = shouts.findAll {it.buySellIndicator == BuySellIndicator.SELL && it.limitPrice <= price}
       turnover.aggregatedQuantityBid = matchingBids?.size() > 0 ? (BigDecimal) matchingBids.sum {it.quantity} : 0.0
       turnover.aggregatedQuantityAsk = matchingAsks?.size() > 0 ? (BigDecimal) matchingAsks.sum {it.quantity} : 0.0
-      turnover.price = (BigDecimal) price
+      turnover.price = price
 
-      if (turnovers.size() == 0 || turnovers?.first() <= turnover) {
-        turnovers << turnover
+      /** store minimum and maximum price each time volume increases, set maximum each time volume is equal*/
+      //if (!maxEquilibriumTurnover) { maxEquilibriumTurnover = turnover }
+
+      if (!maxEquilibriumTurnover || maxEquilibriumTurnover <= turnover) {
+        if (maxEquilibriumTurnover?.equals(turnover)) {
+          maxEquilibriumTurnover = turnover
+        } else {
+          minEquilibriumTurnover = turnover
+          maxEquilibriumTurnover = turnover
+        }
       } else {
         maxTurnoverFound = true
       }
     }
 
-    /** Turnover implement comparable interface and are sorted according to max executable volume
-     *  Todo: If there are more than one turnover with equal executionQuantities the midpoint is set as the clearing price
-     *  Currently the maximum price for equal turnovers is set as the clearing price
-     * */
-    Turnover maxTurnover = turnovers?.first()
-
-
-    if (maxTurnover) {
-      def turnoverItr = turnovers.iterator()
-      BigDecimal minEquilibriumPrice = maxTurnover.price
-      Turnover minPriceMaxTurnover = turnoverItr.next()
-      Boolean endOfTurnoversReached = false
-
-      if (turnoverItr.hasNext()) {minPriceMaxTurnover = turnoverItr.next()}
-
-      while (!endOfTurnoversReached && minPriceMaxTurnover.equals(maxTurnover)) {
-        minEquilibriumPrice = minPriceMaxTurnover.price
-        if (turnoverItr.hasNext()) {
-          minPriceMaxTurnover = turnoverItr.next()
-        } else {
-          endOfTurnoversReached = true
-        }
-      }
-
-      maxTurnover.price = (maxTurnover.price + minEquilibriumPrice)/2
-      return maxTurnover
+    /** Turnover implement comparable interface and are sorted according to max executable volume */
+    if (maxEquilibriumTurnover) {
+      Turnover clearingTurnover = new Turnover()
+      clearingTurnover.price = (maxEquilibriumTurnover.price + minEquilibriumTurnover.price)/2
+      clearingTurnover.aggregatedQuantityAsk = Math.min(maxEquilibriumTurnover.aggregatedQuantityAsk, minEquilibriumTurnover?.aggregatedQuantityAsk)
+      clearingTurnover.aggregatedQuantityBid = Math.min(maxEquilibriumTurnover.aggregatedQuantityBid, minEquilibriumTurnover?.aggregatedQuantityBid)
+      return clearingTurnover
     } else {
       log.debug "No maximum turnover found during uniform price calculation"
       return null

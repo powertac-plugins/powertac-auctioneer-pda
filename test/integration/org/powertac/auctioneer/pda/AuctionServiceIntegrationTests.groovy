@@ -385,7 +385,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
 
-  def testCompleteAllocationOfSingleBuyShout = {->
+  void testCompleteAllocationOfSingleBuyShout() {
     //init
     buyShout.quantity = 50
     buyShout.limitPrice = 11
@@ -539,6 +539,48 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(40.0, turnover.executableVolume)
     assertEquals(50.0, turnover.aggregatedQuantityAsk)
     assertEquals(40.0, turnover.aggregatedQuantityBid)
+  }
+
+  void testUniformPriceCalculationWithEqualExecutionQuantities() {
+    //init
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 40.0
+    auctionService.processShout(sellShout)
+
+    Shout sellShout2 = new Shout(sellShout.properties)
+    sellShout2.limitPrice = 12.0
+    sellShout2.quantity = 10.0
+    auctionService.processShout(sellShout2)
+
+    Shout sellShout3 = new Shout(sellShout.properties)
+    sellShout3.limitPrice = 13.0
+    sellShout3.quantity = 20.0
+    auctionService.processShout(sellShout3)
+
+    buyShout.limitPrice = 13.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
+
+    Shout buyShout2 = new Shout(buyShout.properties)
+    buyShout2.limitPrice = 12.0
+    buyShout2.quantity = 30.0
+    auctionService.processShout(buyShout2)
+
+    Shout buyShout3 = new Shout(buyShout.properties)
+    buyShout3.limitPrice = 11.0
+    buyShout3.quantity = 10.0
+    auctionService.processShout(buyShout3)
+
+    //action
+    def shouts = Shout.list()
+    Turnover turnover = auctionService.calcUniformPrice(shouts)
+
+    //validate
+    assertEquals(11.5, turnover.price)
+    assertEquals(40.0, turnover.executableVolume)
+    // Todo: aggregatedQuantityAsk is 50 but should be 40 if midpoint is used as execution price min(
+    //assertEquals(40.0, turnover.aggregatedQuantityAsk)
+    //assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
 
   void testSimpleMarketClearing() {
