@@ -143,7 +143,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         String transactionId = IdGenerator.createId()
 
         /** take snapshot of orderbook before matching and append it to orderbookList    */
-        Orderbook ob = Orderbook.findByTimeslot(timeslot)
+        Orderbook ob = Orderbook.findByTimeslotAndProduct(timeslot, product)
         if (!ob) {
           ob = new Orderbook(timeslot: timeslot, product: product, dateExecuted: timeService.currentTime)
           timeslot.addToOrderbooks(ob)
@@ -390,7 +390,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     if (oe.buySellIndicator == BuySellIndicator.BUY) {
       ob.addToBids(oe)
     } else {
-      ob.addToAsks(oe)
+      if (oe.buySellIndicator == BuySellIndicator.SELL) {ob.addToAsks(oe)}
     }
 
     if (!ob.save()) {
