@@ -34,7 +34,8 @@ import org.powertac.common.PluginConfig
 import org.powertac.common.interfaces.CompetitionControl
 import org.joda.time.Instant
 
-import org.powertac.common.OrderbookEntry
+import org.powertac.common.OrderbookBid
+import org.powertac.common.OrderbookAsk
 
 /**
  * Implementation of {@link org.powertac.common.interfaces.Auctioneer}
@@ -368,30 +369,31 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
       ob.dateExecuted = timeService.currentTime
     }
 
-    OrderbookEntry oe
+    def oe
 
-    /** check if price level does already exist in orderbook     */
     if (shout.buySellIndicator == BuySellIndicator.BUY) {
+      /** check if price level does already exist in orderbook else initialize new OrderbookBid    */
       oe = ob.bids?.find {it -> it.limitPrice == shout.limitPrice}
-    } else {
-      oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
-    }
-
-    /** if price level does not exist, initialize new OrderbookEntry     */
-    if (!oe) {
-      oe = new OrderbookEntry(limitPrice: shout.limitPrice, quantity: 0)
-    }
-
-    /** update/initialize orderbookEntry     */
-    oe.quantity += shout.quantity
-    oe.buySellIndicator = shout.buySellIndicator
-
-    ob.timeslot.addToOrderbooks(ob)
-    if (oe.buySellIndicator == BuySellIndicator.BUY) {
+      if (!oe) { oe = new OrderbookBid(limitPrice: shout.limitPrice, quantity: 0) }
+      oe.quantity += shout.quantity
       ob.addToBids(oe)
     } else {
-      if (oe.buySellIndicator == BuySellIndicator.SELL) {ob.addToAsks(oe)}
+      /** check if price level does already exist in orderbook else initialize new OrderbookAsk    */
+      oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
+      if (!oe) { oe = new OrderbookAsk(limitPrice: shout.limitPrice, quantity: 0) }
+      oe.quantity += shout.quantity
+      ob.addToAsks(oe)
+
     }
+
+
+    ob.timeslot.addToOrderbooks(ob)
+    /*
+    if (oe.buySellIndicator == BuySellIndicator.BUY) {
+
+    } else {
+      if (oe.buySellIndicator == BuySellIndicator.SELL) {}
+    } */
 
     if (!ob.save()) {
       log.error "Failed to save orderbook: ${ob.errors}"

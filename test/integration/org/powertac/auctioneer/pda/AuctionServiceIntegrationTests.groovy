@@ -301,24 +301,24 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     Orderbook ob = auctionService.updateOrderbook(buyShout2)
 
     //validate
-    OrderbookEntry bestBid = ob.bids.first()
+    OrderbookBid bestBid = ob.bids.first()
     assertEquals(buyShout2.limitPrice, bestBid.limitPrice)
     assertEquals((buyShout.quantity + buyShout2.quantity), bestBid.quantity)
     assertEquals(1, ob.bids.size())
 
-    OrderbookEntry bestAsk = ob.asks.first()
+    OrderbookAsk bestAsk = ob.asks.first()
     assertEquals(sellShout.limitPrice, bestAsk.limitPrice)
     assertEquals(sellShout.quantity, bestAsk.quantity)
     assertEquals(1, ob.asks.size())
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
 
-    OrderbookEntry bestPersistedBid = persistedOb.bids.first()
+    OrderbookBid bestPersistedBid = persistedOb.bids.first()
     assertEquals(buyShout2.limitPrice, bestPersistedBid.limitPrice)
     assertEquals((buyShout.quantity + buyShout2.quantity), bestPersistedBid.quantity)
     assertEquals(1, persistedOb.bids.size())
 
-    OrderbookEntry bestPersistedAsk = persistedOb.asks.first()
+    OrderbookAsk bestPersistedAsk = persistedOb.asks.first()
     assertEquals(sellShout.limitPrice, bestPersistedAsk.limitPrice)
     assertEquals(sellShout.quantity, bestPersistedAsk.quantity)
     assertEquals(1, persistedOb.asks.size())
@@ -330,7 +330,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     auctionService.processShout(sellShout)
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
-    OrderbookEntry bestAsk = persistedOb.asks.first()
+    OrderbookAsk bestAsk = persistedOb.asks.first()
     assertNotNull(persistedOb)
     assertEquals(13.0, bestAsk.limitPrice)
     assertEquals(10.0, bestAsk.quantity)
@@ -343,7 +343,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
     bestAsk = persistedOb.asks.first()
-    OrderbookEntry bestBid = persistedOb.bids.first()
+    OrderbookBid bestBid = persistedOb.bids.first()
     assertNotNull(persistedOb)
     assertEquals(13.0, bestAsk.limitPrice)
     assertEquals(10.0, bestAsk.quantity)
@@ -364,7 +364,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     bestBid = persistedOb.bids.first()
     def iter = persistedOb.asks.iterator()
     iter.next()
-    OrderbookEntry secondBestAsk = iter.next()
+    OrderbookAsk secondBestAsk = iter.next()
     assertNotNull(persistedOb)
     assertEquals(12.0, bestAsk.limitPrice)
     assertEquals(20.0, bestAsk.quantity)
