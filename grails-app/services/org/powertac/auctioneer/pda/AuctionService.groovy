@@ -98,11 +98,11 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
    * Process incoming shout: validate submitted shout and add to market's orderbook.
    * Add serverside properties: modReasonCode, transactionId, (comment)s
    * Update the orderbook and persist shout        */
-  void processShout(Shout incomingShout) {
+  void processShout(Shout shout) {
 
     /** check if incoming shout is valid (timeslot, product)   */
-    if (incomingShout.timeslot.enabled && incomingShout.product == ProductType.Future && incomingShout.quantity && incomingShout.limitPrice) {
-      Shout shout = new Shout(incomingShout.properties)
+    if (shout.timeslot.enabled && shout.product == ProductType.Future && shout.quantity && shout.limitPrice) {
+      //Shout shout = new Shout(incomingShout.properties)
       shout.transactionId = IdGenerator.createId()
       shout.modReasonCode = ModReasonCode.INSERT
 
@@ -119,8 +119,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     } else {
       /** hook to implement feedback for brokers concerning invalid shouts   */
-      log.info("Incoming shout was invalid: ${incomingShout}")
-      if (!incomingShout.limitPrice) log.error("Market order type is not supported in this version.")
+      log.info("Incoming shout was invalid: ${shout}")
+      if (!shout.limitPrice) log.error("Market order type is not supported in this version.")
     }
 
   }
@@ -173,7 +173,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
         List bids = candidates.findAll {it.buySellIndicator == BuySellIndicator.BUY}.sort(DescPriceShoutComparator)
         List asks = candidates.findAll {it.buySellIndicator == BuySellIndicator.SELL}.sort(AscPriceShoutComparator)
 
-        if (!turnover?.executableVolume || !turnover?.price) log.info("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
+        if (!turnover?.executableVolume || !turnover?.price)
+          log.info("Turnover did not contain information on executable volume and / or price for product ${product} and timeslot ${timeslot}.")
         log.debug "Price for product ${product} and timeslot ${timeslot}: ${turnover?.price}"
 
         if (candidates?.size() < 1) {

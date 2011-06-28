@@ -102,11 +102,13 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sellShout = new Shout(broker: sampleSeller, product: sampleProduct, timeslot: sampleTimeslot, buySellIndicator: BuySellIndicator.SELL)
   }
 
-  protected void tearDown() {
+  protected void tearDown() 
+  {
     super.tearDown()
   }
 
-  void simulateTransition() {
+  void simulateTransition() 
+  {
     /** Simulate transition to next round: enable/disable timeslots  */
     Timeslot enabledTs = Timeslot.findBySerialNumber(7)
 
@@ -117,10 +119,12 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assert (enabledTs.save())
   }
 
-  void testIncomingSellShout() {
-    sellShout.limitPrice = 10.0
-    sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+  void testIncomingSellShout()
+  {
+    Shout sellShoutA = new Shout(sellShout.properties)
+    sellShoutA.limitPrice = 10.0
+    sellShoutA.quantity = 20.0
+    auctionService.processShout(sellShoutA)
 
     assertEquals(1, Shout.list().size())
     Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
@@ -133,10 +137,12 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull s1.transactionId
   }
 
-  void testIncomingBuyShout() {
-    buyShout.limitPrice = 10.0
-    buyShout.quantity = 20.0
-    auctionService.processShout(buyShout)
+  void testIncomingBuyShout() 
+  {
+    Shout bs = new Shout(buyShout.properties)
+    bs.limitPrice = 10.0
+    bs.quantity = 20.0
+    auctionService.processShout(bs)
 
     assertEquals(1, Shout.list().size())
     Shout s1 = (Shout) Shout.withCriteria(uniqueResult: true) {
@@ -149,14 +155,17 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertNotNull s1.transactionId
   }
 
-  void testIncomingBuyAndSellShout() {
-    sellShout.limitPrice = 10.0
-    sellShout.quantity = 10.0
-    auctionService.processShout(sellShout)
+  void testIncomingBuyAndSellShout() 
+  {
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.limitPrice = 10.0
+    ss1.quantity = 10.0
+    auctionService.processShout(ss1)
 
-    buyShout.limitPrice = 12.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.limitPrice = 12.0
+    bs1.quantity = 10.0
+    auctionService.processShout(bs1)
 
     assertEquals(2, Shout.list().size())
 
@@ -180,29 +189,31 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
 
-  void testSimpleAskAndBidEntryInEmptyOrderbook() {
+  void testSimpleAskAndBidEntryInEmptyOrderbook() 
+  {
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.quantity = 50
+    bs1.limitPrice = 11
+    bs1.transactionId = "tbd"
+    assert bs1.save()
 
-    buyShout.quantity = 50
-    buyShout.limitPrice = 11
-    buyShout.transactionId = "tbd"
-    assert buyShout.save()
+    auctionService.updateOrderbook(bs1)
 
-    auctionService.updateOrderbook(buyShout)
-
-    sellShout.quantity = 20
-    sellShout.limitPrice = 13
-    sellShout.transactionId = "tbd2"
-    assert sellShout.save()
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.quantity = 20
+    ss1.limitPrice = 13
+    ss1.transactionId = "tbd2"
+    assert ss1.save()
 
     //action
-    Orderbook ob = auctionService.updateOrderbook(sellShout)
+    Orderbook ob = auctionService.updateOrderbook(ss1)
 
     //validate
-    assertEquals(buyShout.limitPrice, ob.bids.first().limitPrice)
-    assertEquals(buyShout.quantity, ob.bids.first().quantity)
+    assertEquals(bs1.limitPrice, ob.bids.first().limitPrice)
+    assertEquals(bs1.quantity, ob.bids.first().quantity)
 
-    assertEquals(sellShout.limitPrice, ob.asks.first().limitPrice)
-    assertEquals(sellShout.quantity, ob.asks.first().quantity)
+    assertEquals(ss1.limitPrice, ob.asks.first().limitPrice)
+    assertEquals(ss1.quantity, ob.asks.first().quantity)
 
     assertEquals(1, ob.asks.size())
     assertEquals(1, ob.bids.size())
@@ -210,11 +221,11 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
 
-    assertEquals(buyShout.limitPrice, persistedOb.bids.first().limitPrice)
-    assertEquals(buyShout.quantity, persistedOb.bids.first().quantity)
+    assertEquals(bs1.limitPrice, persistedOb.bids.first().limitPrice)
+    assertEquals(bs1.quantity, persistedOb.bids.first().quantity)
 
-    assertEquals(sellShout.limitPrice, persistedOb.asks.first().limitPrice)
-    assertEquals(sellShout.quantity, persistedOb.asks.first().quantity)
+    assertEquals(ss1.limitPrice, persistedOb.asks.first().limitPrice)
+    assertEquals(ss1.quantity, persistedOb.asks.first().quantity)
 
     assertEquals(1, persistedOb.asks.size())
     assertEquals(1, persistedOb.bids.size())
@@ -222,18 +233,18 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     println "Size Ob: ${Orderbook.findAllByTimeslot(sampleTimeslot).size()}"
     def trace = AuditLogEvent.findAllByClassNameAndPersistedObjectId(persistedOb.getClass().getName(), persistedOb.id)
     trace.each { println "Log ${it.className} ${it.persistedObjectId}, prop:${it.propertyName} was ${it.oldValue}, now ${it.newValue}" }
-
   }
 
-  void testSimpleAskEntryInEmptyOrderbook() {
-
-    sellShout.quantity = 20
-    sellShout.limitPrice = 13
-    sellShout.transactionId = "123"
-    assert sellShout.save()
+  void testSimpleAskEntryInEmptyOrderbook() 
+  {
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.quantity = 20
+    ss1.limitPrice = 13
+    ss1.transactionId = "123"
+    assert ss1.save()
 
     //action
-    Orderbook ob = auctionService.updateOrderbook(sellShout)
+    Orderbook ob = auctionService.updateOrderbook(ss1)
 
     //validate
     assertEquals(13, ob.asks.first().limitPrice)
@@ -251,15 +262,16 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, persistedOb.bids.size())
   }
 
-  void testSimpleBidEntryInEmptyOrderbook() {
-
-    buyShout.quantity = 50
-    buyShout.limitPrice = 11
-    buyShout.transactionId = "tbd"
-    assert buyShout.save()
+  void testSimpleBidEntryInEmptyOrderbook() 
+  {
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.quantity = 50
+    bs1.limitPrice = 11
+    bs1.transactionId = "tbd"
+    assert bs1.save()
 
     //action
-    Orderbook ob = auctionService.updateOrderbook(buyShout)
+    Orderbook ob = auctionService.updateOrderbook(bs1)
 
     //validate
     assertEquals(11, ob.bids.first().limitPrice)
@@ -281,53 +293,58 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   /** Incoming shout (bid) adds quantity to existing price level                      */
   void testAggregationUpdateOfEmptyOrderbook() {
     //init
-    buyShout.quantity = 50
-    buyShout.limitPrice = 11
-    buyShout.transactionId = "tbd"
-    assert buyShout.save()
-    auctionService.updateOrderbook(buyShout)
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.quantity = 50
+    bs1.limitPrice = 11
+    bs1.transactionId = "tbd"
+    assert bs1.save()
+    auctionService.updateOrderbook(bs1)
 
-    sellShout.quantity = 20
-    sellShout.limitPrice = 13
-    sellShout.transactionId = "tbd2"
-    assert sellShout.save()
-    auctionService.updateOrderbook(sellShout)
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.quantity = 20
+    ss1.limitPrice = 13
+    ss1.transactionId = "tbd2"
+    assert ss1.save()
+    auctionService.updateOrderbook(ss1)
 
     //action
-    buyShout2.quantity = 15
-    buyShout2.limitPrice = 11
-    buyShout2.transactionId = "tbd3"
-    assert buyShout2.save()
-    Orderbook ob = auctionService.updateOrderbook(buyShout2)
+    Shout bs2 = new Shout(buyShout2.properties)
+    bs2.quantity = 15
+    bs2.limitPrice = 11
+    bs2.transactionId = "tbd3"
+    assert bs2.save()
+    Orderbook ob = auctionService.updateOrderbook(bs2)
 
     //validate
     OrderbookBid bestBid = ob.bids.first()
-    assertEquals(buyShout2.limitPrice, bestBid.limitPrice)
-    assertEquals((buyShout.quantity + buyShout2.quantity), bestBid.quantity)
+    assertEquals(bs2.limitPrice, bestBid.limitPrice)
+    assertEquals((bs1.quantity + bs2.quantity), bestBid.quantity)
     assertEquals(1, ob.bids.size())
 
     OrderbookAsk bestAsk = ob.asks.first()
-    assertEquals(sellShout.limitPrice, bestAsk.limitPrice)
-    assertEquals(sellShout.quantity, bestAsk.quantity)
+    assertEquals(ss1.limitPrice, bestAsk.limitPrice)
+    assertEquals(ss1.quantity, bestAsk.quantity)
     assertEquals(1, ob.asks.size())
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
 
     OrderbookBid bestPersistedBid = persistedOb.bids.first()
-    assertEquals(buyShout2.limitPrice, bestPersistedBid.limitPrice)
-    assertEquals((buyShout.quantity + buyShout2.quantity), bestPersistedBid.quantity)
+    assertEquals(bs2.limitPrice, bestPersistedBid.limitPrice)
+    assertEquals((bs1.quantity + bs2.quantity), bestPersistedBid.quantity)
     assertEquals(1, persistedOb.bids.size())
 
     OrderbookAsk bestPersistedAsk = persistedOb.asks.first()
-    assertEquals(sellShout.limitPrice, bestPersistedAsk.limitPrice)
-    assertEquals(sellShout.quantity, bestPersistedAsk.quantity)
+    assertEquals(ss1.limitPrice, bestPersistedAsk.limitPrice)
+    assertEquals(ss1.quantity, bestPersistedAsk.quantity)
     assertEquals(1, persistedOb.asks.size())
   }
 
-  void testProcessOfIncomingShoutSequenceConcerningOrderbookUpdateAndShoutPersistence() {
-    sellShout.limitPrice = 13.0
-    sellShout.quantity = 10.0
-    auctionService.processShout(sellShout)
+  void testProcessOfIncomingShoutSequenceConcerningOrderbookUpdateAndShoutPersistence() 
+  {
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.limitPrice = 13.0
+    ss1.quantity = 10.0
+    auctionService.processShout(ss1)
 
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
     OrderbookAsk bestAsk = persistedOb.asks.first()
@@ -337,9 +354,10 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(1, persistedOb.asks.size())
     assertEquals(0, persistedOb.bids.size())
 
-    buyShout.limitPrice = 10.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.limitPrice = 10.0
+    bs1.quantity = 10.0
+    auctionService.processShout(bs1)
 
     persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
     bestAsk = persistedOb.asks.first()
@@ -488,18 +506,20 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   void testUniformPriceCalculationWithHigherMinimumAskQuantityAtLowestPrice() {
     //init
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+    Shout sellShout1 = new Shout(sellShout.properties)
+    sellShout1.limitPrice = 11.0
+    sellShout1.quantity = 20.0
+    auctionService.processShout(sellShout1)
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 13.0
     sellShout2.quantity = 10.0
     auctionService.processShout(sellShout2)
 
-    buyShout.limitPrice = 13.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout buyShout1 = new Shout(buyShout.properties)
+    buyShout1.limitPrice = 13.0
+    buyShout1.quantity = 10.0
+    auctionService.processShout(buyShout1)
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 11.0
@@ -517,20 +537,23 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(80.0, turnover.aggregatedQuantityBid)
   }
 
-  void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMidpointPrice() {
+  void testUniformPriceCalculationWithHighestMinimumAskQuantityAndMidpointPrice() 
+  {
     //init
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+    Shout sellShout1 = new Shout(sellShout.properties)
+    sellShout1.limitPrice = 11.0
+    sellShout1.quantity = 20.0
+    auctionService.processShout(sellShout1)
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 13.0
     sellShout2.quantity = 10.0
     auctionService.processShout(sellShout2)
 
-    buyShout.limitPrice = 13.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout buyShout1 = new Shout(buyShout.properties)
+    buyShout1.limitPrice = 13.0
+    buyShout1.quantity = 10.0
+    auctionService.processShout(buyShout1)
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 12.0
@@ -553,11 +576,13 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
 
-  void testUniformPriceCalculationWithHighestMinimumBidQuantityAtMiddlePrice() {
+  void testUniformPriceCalculationWithHighestMinimumBidQuantityAtMiddlePrice() 
+  {
     //init
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+    Shout sellShout1 = new Shout(sellShout.properties)
+    sellShout1.limitPrice = 11.0
+    sellShout1.quantity = 20.0
+    auctionService.processShout(sellShout1)
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 12.0
@@ -569,9 +594,10 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sellShout3.quantity = 20.0
     auctionService.processShout(sellShout3)
 
-    buyShout.limitPrice = 13.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout buyShout1 = new Shout(buyShout.properties)
+    buyShout1.limitPrice = 13.0
+    buyShout1.quantity = 10.0
+    auctionService.processShout(buyShout1)
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 12.0
@@ -594,11 +620,13 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
 
-  void testUniformPriceCalculationWithEqualExecutionQuantities() {
+  void testUniformPriceCalculationWithEqualExecutionQuantities() 
+  {
     //init
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 40.0
-    auctionService.processShout(sellShout)
+    Shout sellShout1 = new Shout(sellShout.properties)
+    sellShout1.limitPrice = 11.0
+    sellShout1.quantity = 40.0
+    auctionService.processShout(sellShout1)
 
     Shout sellShout2 = new Shout(sellShout.properties)
     sellShout2.limitPrice = 12.0
@@ -610,9 +638,10 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     sellShout3.quantity = 20.0
     auctionService.processShout(sellShout3)
 
-    buyShout.limitPrice = 13.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout buyShout1 = new Shout(buyShout.properties)
+    buyShout1.limitPrice = 13.0
+    buyShout1.quantity = 10.0
+    auctionService.processShout(buyShout1)
 
     Shout buyShout2 = new Shout(buyShout.properties)
     buyShout2.limitPrice = 12.0
@@ -635,24 +664,25 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(40.0, turnover.aggregatedQuantityBid)
   }
 
-  void testSimpleMarketClearing() {
+  void testSimpleMarketClearing()
+  {
     // brokerProxy for AccountingService
     def messages = [:]
     def proxy =
-    [sendMessage: {broker, message ->
-      if (messages[broker] == null) {
-        messages[broker] = []
-      }
-      messages[broker] << message
-    },
-            sendMessages: {broker, messageList ->
-              if (messages[broker] == null) {
-                messages[broker] = []
-              }
-              messageList.each { message ->
-                messages[broker] << message
-              }
-            }] as BrokerProxy
+        [sendMessage: {broker, message ->
+            if (messages[broker] == null) {
+              messages[broker] = []
+            }
+            messages[broker] << message
+          },
+          sendMessages: {broker, messageList ->
+            if (messages[broker] == null) {
+              messages[broker] = []
+            }
+            messageList.each { message ->
+              messages[broker] << message
+            }
+          }] as BrokerProxy
     accountingService.brokerProxyService = proxy
 
     //init
@@ -706,16 +736,14 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     // Validate settlement
     /* Todo accountingService is failing since last commit changes
-    accountingService.activate(timeService.currentTime, 3)
-    MarketPosition mpBuyer = MarketPosition.findByBrokerAndTimeslot(sampleBuyer, sampleTimeslot)
-    MarketPosition mpSeller = MarketPosition.findByBrokerAndTimeslot(sampleSeller, sampleTimeslot)
-
-    assertEquals(10.0, mpBuyer.overallBalance)
-    assertEquals(-10.0, mpSeller.overallBalance)
-
-    //assertEquals(-110.0, mpBuyer.broker.cash.overallBalance)
-    //assertEquals(110.0, mpSeller.broker.cash.overallBalance)
-    */
+     accountingService.activate(timeService.currentTime, 3)
+     MarketPosition mpBuyer = MarketPosition.findByBrokerAndTimeslot(sampleBuyer, sampleTimeslot)
+     MarketPosition mpSeller = MarketPosition.findByBrokerAndTimeslot(sampleSeller, sampleTimeslot)
+     assertEquals(10.0, mpBuyer.overallBalance)
+     assertEquals(-10.0, mpSeller.overallBalance)
+     //assertEquals(-110.0, mpBuyer.broker.cash.overallBalance)
+     //assertEquals(110.0, mpSeller.broker.cash.overallBalance)
+     */
     Orderbook persistedOb = Orderbook.findByTimeslot(sampleTimeslot)
     def iter = persistedOb.bids.iterator()
     def bestBid = iter.next()
@@ -738,7 +766,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, persistedCt.executionQuantity)
   }
 
-  void testClearingWithoutShouts() {
+  void testClearingWithoutShouts() 
+  {
     auctionService.clearMarket()
 
     Orderbook ob = Orderbook.findByTimeslot(sampleTimeslot)
@@ -751,7 +780,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
   }
 
-  void testProcessShoutForDisabledTimeslot() {
+  void testProcessShoutForDisabledTimeslot() 
+  {
     Timeslot ts = Timeslot.findBySerialNumber(3)
     buyShout.timeslot = ts
     buyShout.limitPrice = 1.0
@@ -763,19 +793,23 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, Shout.list().size())
   }
 
-  void testMultipleClearingRoundsAndBiddingJustForSingleRound() {
+  void testMultipleClearingRoundsAndBiddingJustForSingleRound() 
+  {
     /** Round 1 */
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+    Shout ss1 = new Shout(sellShout.properties)
+    ss1.limitPrice = 11.0
+    ss1.quantity = 20.0
+    auctionService.processShout(ss1)
 
-    buyShout.limitPrice = 11.0
-    buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    Shout bs1 = new Shout(buyShout.properties)
+    bs1.limitPrice = 11.0
+    bs1.quantity = 10.0
+    auctionService.processShout(bs1)
 
-    buyShout2.limitPrice = 2.0
-    buyShout2.quantity = 10.0
-    auctionService.processShout(buyShout2)
+    Shout bs2 = new Shout(buyShout2.properties)
+    bs2.limitPrice = 2.0
+    bs2.quantity = 10.0
+    auctionService.processShout(bs2)
 
     auctionService.activate(timeService.currentTime, 3)
 
@@ -824,20 +858,23 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     /** Round 2  */
     Timeslot secondTs = Timeslot.findBySerialNumber(6)
 
-    sellShout.limitPrice = 11.0
-    sellShout.quantity = 20.0
-    sellShout.timeslot = secondTs
-    auctionService.processShout(sellShout)
+    ss1 = new Shout(sellShout.properties)
+    ss1.limitPrice = 11.0
+    ss1.quantity = 20.0
+    ss1.timeslot = secondTs
+    auctionService.processShout(ss1)
 
-    buyShout.limitPrice = 11.0
-    buyShout.quantity = 10.0
-    buyShout.timeslot = secondTs
-    auctionService.processShout(buyShout)
+    bs1 = new Shout(buyShout.properties)
+    bs1.limitPrice = 11.0
+    bs1.quantity = 10.0
+    bs1.timeslot = secondTs
+    auctionService.processShout(bs1)
 
-    buyShout2.limitPrice = 2.0
-    buyShout2.quantity = 10.0
-    buyShout2.timeslot = secondTs
-    auctionService.processShout(buyShout2)
+    bs2 = new Shout(buyShout.properties)
+    bs2.limitPrice = 2.0
+    bs2.quantity = 10.0
+    bs2.timeslot = secondTs
+    auctionService.processShout(bs2)
 
     auctionService.activate(timeService.currentTime, 3)
 
@@ -880,21 +917,22 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
 
-  void testMultipleClearingRoundsAndBiddingForMultipleRounds() {
+  void testMultipleClearingRoundsAndBiddingForMultipleRounds() 
+  {
     /** Round 1 */
 
     /** bids for next enabled timeslot (serialnumber 5)*/
     sellShout.limitPrice = 11.0
     sellShout.quantity = 20.0
-    auctionService.processShout(sellShout)
+    auctionService.processShout(new Shout(sellShout.properties))
 
     buyShout.limitPrice = 11.0
     buyShout.quantity = 10.0
-    auctionService.processShout(buyShout)
+    auctionService.processShout(new Shout(buyShout.properties))
 
     buyShout2.limitPrice = 10.0
     buyShout2.quantity = 10.0
-    auctionService.processShout(buyShout2)
+    auctionService.processShout(new Shout(buyShout2.properties))
 
     /** bids for future enabled timeslot (serialnumber 6)*/
     Timeslot ts = Timeslot.findBySerialNumber(6)
@@ -986,7 +1024,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(10.0, secondCt.executionQuantity)
   }
 
-  void testShoutDeletionBetweenRoundsForFutureBuyShout() {
+  void testShoutDeletionBetweenRoundsForFutureBuyShout() 
+  {
     sellShout.limitPrice = 11.0
     sellShout.quantity = 20.0
     sellShout.timeslot = futureTimeslot
@@ -998,7 +1037,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     buyShout.limitPrice = 11.0
     buyShout.quantity = 10.0
     buyShout.timeslot = futureTimeslot
-    auctionService.processShout(sellShout)
+    auctionService.processShout(buyShout)
 
     auctionService.activate(timeService.currentTime, 3)
 
@@ -1008,7 +1047,8 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(0, ClearedTrade.list().size())
   }
 
-  void testShoutDeletionBetweenRoundsForFutureSellShout() {
+  void testShoutDeletionBetweenRoundsForFutureSellShout() 
+  {
     buyShout.limitPrice = 11.0
     buyShout.quantity = 10.0
     buyShout.timeslot = futureTimeslot
