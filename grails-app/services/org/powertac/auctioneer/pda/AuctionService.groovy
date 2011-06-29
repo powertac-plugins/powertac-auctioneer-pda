@@ -332,6 +332,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     /** Settlement: reporting market transaction to accountingService        */
     def settlementQuantity = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionQuantity : -allocatedShout.executionQuantity
     def settlementPrice = (allocatedShout.buySellIndicator == BuySellIndicator.BUY) ? allocatedShout.executionPrice : -allocatedShout.executionPrice
+    log.debug "allocate ${allocatedShout.buySellIndicator} qty ${settlementQuantity} at ${settlementPrice}, ts ${allocatedShout.timeslot.serialNumber}"
     accountingService.addMarketTransaction(allocatedShout.broker, allocatedShout.timeslot, settlementPrice, settlementQuantity)
 
     aggregQuantityAllocated += allocatedShout.executionQuantity

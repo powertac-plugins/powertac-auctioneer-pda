@@ -611,6 +611,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
 
     //action
     def shouts = Shout.list()
+    assertEquals("correct number", 6, shouts.size())
     Turnover turnover = auctionService.calcUniformPrice(shouts)
 
     //validate
