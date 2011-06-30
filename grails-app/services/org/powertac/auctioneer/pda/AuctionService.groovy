@@ -101,7 +101,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   void processShout(Shout shout) {
 
     /** check if incoming shout is valid (timeslot, product)   */
-    if (shout.timeslot.enabled && shout.product == ProductType.Future && shout.quantity && shout.limitPrice) {
+    if (shout.timeslot.enabled && shout.product == ProductType.Future && 
+        shout.quantity && shout.limitPrice) {
       //Shout shout = new Shout(incomingShout.properties)
       shout.transactionId = IdGenerator.createId()
       shout.modReasonCode = ModReasonCode.INSERT
@@ -119,7 +120,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     } else {
       /** hook to implement feedback for brokers concerning invalid shouts   */
-      log.info("Incoming shout was invalid: ${shout}(${shout.timeslot}, ${shout.product}, ${shout.quantity}, ${shout.limitPrice})")
+      log.info("Incoming shout was invalid: (${shout.broker.username}, ${shout.timeslot}, ${shout.product}, ${shout.buySellIndicator}, ${shout.quantity}, ${shout.limitPrice})")
       if (!shout.limitPrice) log.error("Market order type is not supported in this version.")
     }
 
@@ -376,13 +377,17 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     if (shout.buySellIndicator == BuySellIndicator.BUY) {
       /** check if price level does already exist in orderbook else initialize new OrderbookBid    */
       oe = ob.bids?.find {it -> it.limitPrice == shout.limitPrice}
-      if (!oe) { oe = new OrderbookBid(limitPrice: shout.limitPrice, quantity: 0) }
+      if (!oe) { 
+        oe = new OrderbookBid(limitPrice: shout.limitPrice, quantity: 0)
+      }
       oe.quantity += shout.quantity
       ob.addToBids(oe)
     } else {
       /** check if price level does already exist in orderbook else initialize new OrderbookAsk    */
       oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
-      if (!oe) { oe = new OrderbookAsk(limitPrice: shout.limitPrice, quantity: 0) }
+      if (!oe) {
+        oe = new OrderbookAsk(limitPrice: shout.limitPrice, quantity: 0)
+      }
       oe.quantity += shout.quantity
       ob.addToAsks(oe)
 
