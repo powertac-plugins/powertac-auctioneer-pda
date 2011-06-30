@@ -119,7 +119,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     } else {
       /** hook to implement feedback for brokers concerning invalid shouts   */
-      log.info("Incoming shout was invalid: ${shout}")
+      log.info("Incoming shout was invalid: ${shout}(${shout.timeslot}, ${shout.product}, ${shout.quantity}, ${shout.limitPrice})")
       if (!shout.limitPrice) log.error("Market order type is not supported in this version.")
     }
 
