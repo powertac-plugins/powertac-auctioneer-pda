@@ -205,7 +205,14 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
           /** create clearedTrade instance to save public information about particular clearing and append it to clearedTradeList     */
           if (turnover?.executableVolume && turnover?.price) {
-            ClearedTrade ct = new ClearedTrade(timeslot: timeslot, product: product, executionPrice: turnover.price, executionQuantity: turnover.executableVolume, transactionId: transactionId)
+
+            ClearedTrade ct = new ClearedTrade( timeslot: timeslot,
+                                                product: product,
+                                                executionPrice: turnover.price,
+                                                executionQuantity: turnover.executableVolume,
+                                                transactionId: transactionId,
+                                                dateExecuted: timeService.currentTime)
+
             if (!ct.save()) log.error "Failed to save ClearedTrade: ${ct.errors}"
             clearedTradeList << ct
             ob.clearingPrice = turnover.price

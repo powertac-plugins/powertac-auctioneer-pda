@@ -1072,7 +1072,7 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
   }
 
 
-  void testOrderbookInMarketClearinWithTwoBids() {
+  void testOrderbookInMarketClearingWithTwoBids() {
     buyShout.limitPrice = 13.0
     buyShout.quantity = 100.0
     buyShout.timeslot = sampleTimeslot
@@ -1115,6 +1115,65 @@ class AuctionServiceIntegrationTests extends GrailsUnitTestCase {
     assertEquals(13, ob.asks.first().limitPrice)
     assertEquals(50, ob.asks.first().quantity)
   }
+
+  void testOrderbookInTwoSequentialMarketClearings() {
+    Shout bs = new Shout(buyShout.properties)
+    bs.limitPrice = 10.0
+    bs.quantity = 20.0
+    bs.timeslot = futureTimeslot
+    auctionService.processShout(bs)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    Orderbook ob = Orderbook.findByProductAndTimeslot(sampleProduct, futureTimeslot)
+
+    assertEquals(1, ob.bids.size())
+    assertEquals(0, ob.asks.size())
+    assertEquals(10, ob.bids.first().limitPrice)
+    assertEquals(20, ob.bids.first().quantity)
+
+    simulateTransition()
+
+    Shout bs2 = new Shout(buyShout.properties)
+    bs2.limitPrice = 11.0
+    bs2.quantity = 30.0
+    bs2.timeslot = futureTimeslot
+    auctionService.processShout(bs2)
+
+    auctionService.activate(timeService.currentTime, 3)
+
+    Orderbook ob2 = Orderbook.findByProductAndTimeslot(sampleProduct, futureTimeslot)
+
+    assertEquals(1, ob2.bids.size())
+    assertEquals(0, ob2.asks.size())
+
+    assertEquals(11, ob2.bids.first().limitPrice)
+    assertEquals(30, ob2.bids.first().quantity)
+  }
+
+  void testDateExecutedPropertyOfClearedTrade() {
+    sellShout.limitPrice = 11.0
+    sellShout.quantity = 20.0
+    auctionService.processShout(sellShout)
+
+    buyShout.limitPrice = 11.0
+    buyShout.quantity = 10.0
+    auctionService.processShout(buyShout)
+
+    //action
+    auctionService.clearMarket()
+
+    //
+    ClearedTrade ct = ClearedTrade.findByTimeslotAndProduct(sampleTimeslot, sampleProduct)
+    assertNotNull(ct.dateExecuted)
+    assertEquals(timeService.getCurrentTime(), ct.dateExecuted)
+  }
+
+  void testClearingPriceOfOrderbook() {
+
+  }
+
+
 
 
 
