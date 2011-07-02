@@ -88,6 +88,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   public void activate(Instant time, int phase) {
     log.debug "Activate() called: clearing market now."
     clearMarket()
+    cleanOrderbooks()
   }
 
   /*
@@ -364,7 +365,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   * @return ob - updated orderbook that holds bids/asks and corresponding quantities
   */
 
-  private Orderbook updateOrderbook(Shout shout) {
+  private Orderbook updateOrderbook(Shout shout) 
+  {
     /** check if there is an existing orderbook else create new one    */
     Orderbook ob = (Orderbook) Orderbook.withCriteria(uniqueResult: true) {
       eq('product', shout.product)
@@ -389,7 +391,8 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
       }
       oe.quantity += shout.quantity
       ob.addToBids(oe)
-    } else {
+    } 
+    else {
       /** check if price level does already exist in orderbook else initialize new OrderbookAsk    */
       oe = ob.asks?.find {it -> it.limitPrice == shout.limitPrice}
       if (!oe) {
@@ -399,7 +402,6 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
       ob.addToAsks(oe)
 
     }
-
 
     ob.timeslot.addToOrderbooks(ob)
     /*
@@ -411,95 +413,30 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
 
     if (!ob.save()) {
       log.error "Failed to save orderbook: ${ob.errors}"
-    } else {
+    } 
+    else {
       log.debug "Succesfully saved orderbook: ${ob}"
     }
     return ob
   }
-
+  
   /**
-   * Delete Shout
-   * Validate shoutId, shoutInstance
-   * Update/save old version of inserted shout and save/return latest version of deleted shout
-   * To do: Broker and Competition validation?
+   * Removes cleared bids and asks from the orderbook after clearing
+   * and before new bids and asks arrive. This must be called within
+   * the same transaction as the call to clearMarket()
    */
-  /*
-    public List processShoutDelete(ShoutDoDeleteCmd shoutDoDeleteCmd) {
-      List output = []
-      def shoutId = shoutDoDeleteCmd.shoutId
-      if (!shoutId) {
-        log.error("Failed to delete shout. No shout id found: ${shoutId}.")
-        return output
-      }
-
-      def shoutInstance = Shout.findByShoutId(shoutId, true)
-      if (!shoutInstance) {
-        log.error("Failed to delete shout. No shout found for id: ${shoutId}")
-        return output
-      }
-      Shout delShout = processShoutDelete(shoutInstance)
-      output << delShout
-
-      Orderbook updatedOrderbook = updateOrderbook(delShout)
-      if (updatedOrderbook) {
-        output << updatedOrderbook
-        MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
-        if (updatedQuote) output << updatedQuote
-      }
-
-      return output
+  private void cleanOrderbooks ()
+  {
+    def timeslots = Timeslot.findAllByEnabled(true)
+    timeslots.each { timeslot ->
+      def orderbooks = Orderbook.findAllByTimeslot(timeslot)
+      orderbooks.each { ob ->
+        ob.bids.clear()
+        ob.asks.clear()
+        if (!ob.save()) {
+          log.error "Failed to save orderbook: ${ob.errors}"
+        }
+      }      
     }
-  */
-  /*
-  private Shout processShoutDelete(Shout shoutInstance) throws ShoutDeletionException {
-
-    def delShout = shoutInstance.initModification(ModReasonCode.DELETIONBYUSER)
-    delShout.transactionId = IdGenerator.createId()
-    if (!delShout.save()) throw new ShoutDeletionException("Failed to save latest version of deleted shout: ${shoutInstance.errors}")
-
-    return delShout
-  } */
-
-  /**
-   * Update Shout
-   * Validate shoutId, shoutInstance
-   * Delete old shout and create copy with modified quantity/limitPrice
-   */
-  /*
- public List processShoutUpdate(ShoutDoUpdateCmd shoutDoUpdateCmd) {
-   List output = []
-   def shoutId = shoutDoUpdateCmd.shoutId
-   if (!shoutId) {
-     log.error("Failed to update shout. No shout id found: ${shoutId}.")
-     return output
-   }
-   def shoutInstance = Shout.findByShoutId(shoutId, true)
-   if (!shoutInstance) {
-     log.error("Failed to update shout, No shout found for id: ${shoutId}")
-     return output
-   }
-
-   def delShout = processShoutDelete(shoutInstance)
-   Shout updatedShout = delShout.initModification(ModReasonCode.MODIFICATION)
-
-   updatedShout.quantity = shoutDoUpdateCmd.quantity ?: delShout.quantity
-   updatedShout.limitPrice = shoutDoUpdateCmd.limitPrice ?: delShout.limitPrice
-   updatedShout.transactionId = IdGenerator.createId()
-
-   if (!updatedShout.save()) {
-     log.error("Failed to save latet version of updated shout: ${updatedShout.errors}")
-     return output
-   }
-
-   Orderbook updatedOrderbook = updateOrderbook(updatedShout)
-   if (updatedOrderbook) {
-     output << updatedOrderbook
-     MarketTransaction updatedQuote = updateQuote(updatedOrderbook)
-     if (updatedQuote) output << updatedQuote
-   }
-
-   return output
- } */
-
-
+  }
 }
