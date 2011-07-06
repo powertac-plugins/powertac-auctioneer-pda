@@ -44,12 +44,14 @@ import org.powertac.common.OrderbookAsk
  */
 
 class AuctionService implements Auctioneer,
-org.powertac.common.interfaces.BrokerMessageListener,
-org.powertac.common.interfaces.TimeslotPhaseProcessor {
-
+    org.powertac.common.interfaces.BrokerMessageListener,
+      org.powertac.common.interfaces.TimeslotPhaseProcessor 
+{
   public static final AscPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? -1 : 1}] as Comparator
   public static final DescPriceShoutComparator = [compare: {Shout a, Shout b -> a.limitPrice.equals(b.limitPrice) ? 0 : a.limitPrice < b.limitPrice ? 1 : -1}] as Comparator
   public static final DescTurnoverComparator = [compare: {Turnover a, Turnover b -> a.executableVolume.equals(b.executableVolume) ? (a.price < b.price ? 1 : -1) : a.executableVolume < b.executableVolume ? 1 : -1}] as Comparator
+  
+  static transactional = true
 
   def timeService
   def accountingService
@@ -59,6 +61,10 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   // read this from plugin config
   PluginConfig configuration
   int simulationPhase = 2
+  
+  // queue of incoming messages - should all be shouts
+  List incoming = []
+  Object incomingLock = new Object()
 
   /**
    * Register for phase 2 activation, to drive wholesale market funcitonality
@@ -77,7 +83,10 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     // dispatch incoming message
     if (msg instanceof Shout) {
       log.debug "Processing incoming shout from BrokerProxy: ${msg}"
-      processShout(msg)
+      //processShout(msg)
+      synchronized (incomingLock) {
+        incoming << msg
+      }
       //if we need a ACK message: brokerProxyService.sendMessage(msg.broker, "ACK for Shout msg")
     } else {
       brokerProxyService.sendMessage(msg.broker, "No valid object")
@@ -87,6 +96,16 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
   @Override
   public void activate(Instant time, int phase) {
     log.debug "Activate() called: clearing market now."
+    while (incoming.size() > 0) {
+      // we minimize the time spent in the lock by just grabbing the message
+      // and processing it after we release the lock
+      def thing
+      synchronized (incomingLock) {
+        thing = incoming.first()
+        incoming = incoming.tail()
+      }
+      processShout(thing)
+    }
     clearMarket()
     cleanOrderbooks()
   }
@@ -417,6 +436,7 @@ org.powertac.common.interfaces.TimeslotPhaseProcessor {
     else {
       log.debug "Succesfully saved orderbook: ${ob}"
     }
+    ob.timeslot.save()
     return ob
   }
   
