@@ -451,7 +451,9 @@ class AuctionService implements Auctioneer,
     timeslots.each { timeslot ->
       def orderbooks = Orderbook.findAllByTimeslot(timeslot)
       orderbooks.each { ob ->
+        ob.bids.each { bid -> bid.delete() }
         ob.bids.clear()
+        ob.asks.each { ask -> ask.delete() }
         ob.asks.clear()
         if (!ob.save()) {
           log.error "Failed to save orderbook: ${ob.errors}"
