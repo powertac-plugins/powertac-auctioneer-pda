@@ -27,5 +27,6 @@
 	</classpathentry>
 	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/powertac-common"/>
 	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/powertac-server-interface"/>
+	<classpathentry exported="true" kind="con" path="GROOVY_DSL_SUPPORT"/>
 	<classpathentry kind="output" path="web-app/WEB-INF/classes"/>
 </classpath>
